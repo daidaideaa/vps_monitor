@@ -17,7 +17,7 @@
 ## 结构
 
 ```text
-index.html                        五卡页面，仅读取 VPS API
+index.html                        2×2 商户卡片，V.PS 两个套餐合并展示，仅读取 VPS API
 server/stock_targets.py            ZgoCloud / RFCHOST / V.PS 官方套餐地址
 server/vps_stock_monitor.py        四个套餐查询、解析与独立持久化
 server/vps-stock-monitor.*         随机 8～12 分钟运行一次的 systemd 服务与定时器

@@ -11,12 +11,12 @@ function element() {
 }
 function page(fetcher) {
   const script = readFileSync(join(__dirname, '../index.html'), 'utf8').match(/<script>([\s\S]*?)<\/script>/)[1];
-  const nodes = { cards: element(), reload: element(), refresh: element() };
+  const nodes = { cards: element(), reload: element(), refresh: element(), overview: element() };
   const context = vm.createContext({ document: { getElementById: id => nodes[id], createElement: element },
     fetch: fetcher, AbortSignal, URL, Intl, setInterval() {} });
   vm.runInContext(script.replace("reload.addEventListener('click',load);load();", "reload.addEventListener('click',load);"), context);
   return { nodes, run: code => vm.runInContext(code, context),
-    states: () => nodes.cards.children.map(card => card.dataset.state),
+    states: () => { const visit = node => [...(node.dataset.productId ? [node.dataset.state] : []), ...node.children.flatMap(visit)]; return nodes.cards.children.flatMap(visit); },
     text: () => { const visit = node => [node.textContent, ...node.children.flatMap(visit)]; return nodes.cards.children.flatMap(visit).join(' '); } };
 }
 const checked = () => new Date().toISOString();
@@ -28,13 +28,30 @@ const snapshot = () => ({ schema_version: 2, products: [
   { id: 'vps-tokyo-cloud-starter', provider: 'V.PS', status: 'available', last_confirmed: 'available', last_checked: checked(), check_interval_seconds: 300 },
 ] });
 
-test('一次刷新只读香港 VPS API，固定顺序展示五个套餐，不访问 Worker 或商家', async () => {
+test('一次刷新只读 VPS API，四张卡片展示五个独立套餐', async () => {
   const urls = [];
   const p = page(async url => { urls.push(url); return Response.json(snapshot()); });
   await p.run('load()');
   assert.deepEqual(urls, ['https://vmiss-status.96-126-179-210.sslip.io/status.json']);
   assert.deepEqual(p.states(), ['available','unavailable','unavailable','available','unavailable']);
+  assert.equal(p.nodes.cards.children.length, 4);
   assert.equal(p.run("latest.map(p=>p.provider).join(',')"), 'VMISS,ZgoCloud,RFCHOST,V.PS,V.PS');
+});
+
+test('V.PS 合并展示但状态、链接、历史与待确认统计相互独立', async () => {
+  const data = snapshot();
+  data.products[3] = {...data.products[3],status:'unknown',unknown_count:1,unavailable_since:new Date(Date.now()-3600000).toISOString()};
+  const p = page(async () => Response.json(data)); await p.run('load()');
+  assert.deepEqual(p.states().slice(3), ['available','unknown']);
+  const group = p.nodes.cards.children[3];
+  const visit = node => [node, ...node.children.flatMap(visit)];
+  const all = visit(group);
+  assert.deepEqual(all.filter(node=>node.href).map(node=>node.href),[
+    'https://vps.hosting/?action=add&cmd=cart&id=148',
+    'https://vps.hosting/?action=add&cmd=cart&id=149'
+  ]);
+  assert.match(p.text(), /当前待确认/);
+  assert.equal(visit(p.nodes.overview).map(node=>node.textContent).join(''), '5套餐2有货2无货1待确认');
 });
 
 test('VPS 断连保留历史但五个套餐均为 offline，恢复后解除离线', async () => {
