@@ -138,7 +138,7 @@ def check_target(target: dict) -> tuple[str, int | None]:
     html = fetch_page(target['product_url'])
     if target['provider'] == 'ZgoCloud':
         return parse_zgocloud(html)
-    if target['provider] == 'RFCHOST':
+    if target['provider'] == 'RFCHOST':
         return parse_rfchost(html)
     raise ValueError(f"Unsupported provider: {target['provider']}")
 
