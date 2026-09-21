@@ -1,0 +1,14 @@
+{
+  "name": "vps-monitor-tokyo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.js ../tests/frontend.test.cjs",
+    "dev": "wrangler dev --test-scheduled",
+    "deploy": "node scripts/deploy.mjs",
+    "logs": "wrangler tail"
+  },
+  "devDependencies": {
+    "wrangler": "4.135.0"
+  }
+}

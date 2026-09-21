@@ -3,3 +3,7 @@ __pycache__/
 *.pyc
 .env
 status.json
+node_modules/
+.wrangler/
+.dev.vars
+.dev.vars.*
