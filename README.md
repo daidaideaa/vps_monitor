@@ -162,6 +162,40 @@ curl https://vmiss-status.96-126-179-210.sslip.io/status.json
 
 不要停止 `/opt/vmiss-stock-monitor` 对应的现有监控服务。原 Caddy 和 `vmiss-public-status.timer` 保留。旧 `/var/lib/vps-stock-monitor/http-status.json` 已不再读取，可自行归档；新导出器不再合并或补造另外两家的记录。
 
+## RFCHOST 手动浏览器探测
+
+`.github/workflows/rfchost-probe.yml` 是独立的诊断 workflow，仅接受 `workflow_dispatch`，没有定时任务。它在 Ubuntu runner 上使用 Node 22 和 Playwright Chromium，只读复用 `worker/src/index.js` 已确认的 RFCHOST 官方 URL，允许浏览器正常重定向，不写入 Worker、KV 或 GitHub Pages，不提交检测结果。
+
+该 workflow 文件进入默认分支后，在 GitHub **Actions → RFCHOST browser probe → Run workflow** 手动运行，展开 **probe → Probe RFCHOST** 查看 JSON：
+
+| 字段 | 可可靠解析时的值 |
+| --- | --- |
+| `http_status` / `http_ok` | `200` / `true` |
+| `page_load` | `success`，不是 `timeout`、`challenge`、`http_error` 或 `failed` |
+| `final_url` / `page_title` | RFCHOST 官方页面地址和正常套餐页标题；URL 非业务查询参数会脱敏 |
+| `found_micro` / `found_mini` / `boundary_valid` | 都为 `true`，两个套餐标记唯一且顺序正确 |
+| `available_match_count` / `unique_available` | `1` / `true`，仅统计 Micro 到 Mini 之间的区域 |
+| `stock` / `status` | `0` / `unavailable`，或正整数 / `available` |
+
+403、验证页、超时、目标缺失、异常边界、多个库存标记或其他无法可靠识别的情况输出 `stock: null`、`status: unknown`，脚本退出码为 1。**真实无货也属于成功探测**，退出码为 0。日志不包含完整页面、cookies、敏感 headers 或异常堆栈，不保存页面和截图，也不处理或绕过安全验证。
+
+本地离线解析测试（不访问 RFCHOST）：
+
+```bash
+cd worker
+npm ci
+npm run test:probe-rfchost
+```
+
+如需在本机主动进行一次浏览器探测：
+
+```bash
+npx playwright install --with-deps chromium
+npm run probe:rfchost
+```
+
+离线测试只能验证解析规则，不能证明 GitHub runner 能访问商家。手动运行后满足上述全部条件，才说明该次 GitHub runner 访问和解析成功；是否能长期替代 Cloudflare 抓取，还需在不同时间手动验证稳定性。本探测不会切换线上数据源。
+
 ## 免费额度
 
 每天约 480 次 Cron，每轮两次商家 HTTP 请求、一次 KV 读取、**一次合并 KV 写入**：约 480 writes/day。不会为每个商家分别写 KV，也不会为每次页面刷新写 KV。
