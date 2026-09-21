@@ -66,7 +66,7 @@ def _public_product(state, provider, product_id, interval=INTERVAL):
         'stock': stock,
         'explanation': _explanation(errors, state.get('last_unknown_reason'), confirmed),
         'check_interval_seconds': max(30, int(interval)),
-        'query_location': state.get('query_location') if state.get('query_location') in {'hong-kong-vps', 'japan-vps-egress'} else 'hong-kong-vps',
+        'query_location': state.get('query_location') if state.get('query_location') in {'hong-kong-vps', 'japan-vps-egress', 'japan-home-vps'} else os.environ.get('QUERY_LOCATION', 'hong-kong-vps'),
         'check_interval_min_seconds': 480,
         'check_interval_max_seconds': 720,
     }
@@ -142,7 +142,7 @@ def combined_snapshot(vmiss_state, other_state=None, interval=INTERVAL, previous
         # The checker persists history even if the exporter skips intermediate checks.
         public.update(_inventory_history(public, {**state, **target}))
         products.append(public)
-    return {'schema_version': 2, 'query_location': 'hong-kong-vps',
+    return {'schema_version': 2, 'query_location': os.environ.get('QUERY_LOCATION', 'hong-kong-vps'),
             'products': products, 'published_at': datetime.now(timezone.utc).isoformat()}
 
 

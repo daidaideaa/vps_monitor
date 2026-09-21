@@ -1,0 +1,9 @@
+[Unit]
+Description=Publish changed Japan inventory snapshots
+[Timer]
+OnBootSec=30
+OnUnitActiveSec=30
+AccuracySec=1
+Unit=vps-status-publish.service
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,17 @@
+[Unit]
+Description=Export and publish Japan public inventory snapshot
+[Service]
+Type=oneshot
+User=vmiss-monitor
+Group=vmiss-monitor
+Environment=QUERY_LOCATION=japan-home-vps
+ExecStart=/opt/vmiss-stock-monitor/.venv/bin/python /opt/vmiss-public-status/export_status.py
+ExecStart=/opt/vmiss-stock-monitor/.venv/bin/python /opt/vmiss-public-status/publish_status.py
+StateDirectory=vmiss-public-status
+UMask=0022
+MemoryMax=48M
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/vmiss-public-status

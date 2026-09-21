@@ -32,7 +32,7 @@ test('一次刷新只读 VPS API，四张卡片展示五个独立套餐', async 
   const urls = [];
   const p = page(async url => { urls.push(url); return Response.json(snapshot()); });
   await p.run('load()');
-  assert.deepEqual(urls, ['https://vmiss-status.96-126-179-210.sslip.io/status.json']);
+  assert.deepEqual(urls, ['https://jp-vps-status.jp-home-subscription.workers.dev/status.json']);
   assert.deepEqual(p.states(), ['available','unavailable','unavailable','available','unavailable']);
   assert.equal(p.nodes.cards.children.length, 4);
   assert.equal(p.run("latest.map(p=>p.provider).join(',')"), 'VMISS,ZgoCloud,RFCHOST,V.PS,V.PS');

@@ -1,4 +1,4 @@
-"""Public, fixed targets queried by the Hong Kong VPS."""
+"""Public, fixed targets queried directly by JP-HOME-HY2."""
 TARGETS = (
     {'id': 'zgocloud-tokyo-intel-starter', 'provider': 'ZgoCloud',
      'product_name': 'Tokyo Intel VPS · Starter',

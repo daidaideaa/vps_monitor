@@ -442,7 +442,7 @@ def update_product(target, result, previous, checked):
                'last_checked': checked, 'unknown_count': errors + 1 if status == 'unknown' else 0,
                'last_unknown_reason': result.get('explanation', '') if status == 'unknown' else '',
                'check_interval_seconds': INTERVAL,
-               'query_location': result.get('query_location', 'hong-kong-vps')}
+               'query_location': result.get('query_location', os.environ.get('QUERY_LOCATION', 'hong-kong-vps'))}
     product['stock_notified'] = False if status == 'unavailable' else previous.get('stock_notified') is True
     product['error_notified'] = previous.get('error_notified') is True if status == 'unknown' else False
     product['baseline_required'] = previous.get('baseline_required') is True

@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="color-scheme" content="light"><meta name="description" content="东京 VPS 库存观察：四家商户、五个套餐，香港监测，日本备用出口复查。">
+<meta name="color-scheme" content="light"><meta name="description" content="东京 VPS 库存观察：四家商户、五个套餐，日本家宽 VPS 独立监测。">
 <title>东京 VPS 库存观察</title>
 <link rel="preload" href="./assets/fonts/openai-regular.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="./assets/fonts/openai-medium.woff2" as="font" type="font/woff2" crossorigin>
@@ -12,15 +12,15 @@
 </head>
 <body><div class="wrap">
 <header class="site-header"><a class="brand" href="./" aria-label="库存监控首页"><span class="brand-icon" aria-hidden="true"><i></i><i></i></span>库存观察 <span class="breadcrumb">东京</span></a><a class="repo-link" href="https://github.com/daidaideaa/vps_monitor" target="_blank" rel="noopener noreferrer">GitHub ↗</a></header>
-<section class="heading"><div><h1>东京 VPS 库存</h1><p class="subtitle">每 8～12 分钟查询商家，确认到货后发送邮件。</p></div><span class="location"><span aria-hidden="true">◎</span> 香港查询 · 日本备用</span></section>
+<section class="heading"><div><h1>东京 VPS 库存</h1><p class="subtitle">每 8～12 分钟查询商家，确认到货后发送邮件。</p></div><span class="location"><span aria-hidden="true">◎</span> JP-HOME-HY2 · 日本家宽</span></section>
 <div class="toolbar"><div id="overview" class="overview" role="status">正在读取结果…</div><div class="actions"><span id="refresh" class="refresh" title="页面每 30 秒同步服务器已有结果，不触发商家查询。">正在同步…</span><button id="reload" type="button" title="读取服务器已有结果，不触发商家查询"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M13 6a5 5 0 1 0 .1 4M13 2v4H9"/></svg>同步结果</button></div></div>
 <main id="cards" class="grid" aria-label="商户库存"><div class="empty">正在读取最近一次检查结果。</div></main>
-<div class="monitor-info"><p>时间均为北京时间。无货时长包含暂时无法确认的时段。</p><details><summary>查询与同步有什么区别？</summary><p>VPS 每轮随机间隔 8～12 分钟访问商家。此页面每 30 秒读取服务器已经保存的结果，“同步结果”也只读取已有结果，不会额外查询商家。每个套餐的“实际检查”才是库存检测时间。香港无法确认时会经日本备用出口复查；验证受阻或记录过期时保留待确认状态。</p></details></div>
+<div class="monitor-info"><p>时间均为北京时间。无货时长包含暂时无法确认的时段。</p><details><summary>查询与同步有什么区别？</summary><p>VPS 每轮随机间隔 8～12 分钟访问商家。此页面每 30 秒读取服务器已经保存的结果，“同步结果”也只读取已有结果，不会额外查询商家。每个套餐的“实际检查”才是库存检测时间。全部查询与邮件提醒由日本家宽 VPS 独立完成；验证受阻或记录过期时保留待确认状态。</p></details></div>
 <footer><p>独立监控，库存及购买信息以商家官网为准。</p><p>VMISS · ZgoCloud · RFCHOST · V.PS</p></footer>
 </div>
 <script>
-// 四家都由香港 VPS 查询，页面刷新只读取已有结果。
-const VPS_API='https://vmiss-status.96-126-179-210.sslip.io/status.json';
+// 四家都由日本家宽 VPS 查询，页面刷新只读取已有结果。
+const VPS_API='https://jp-vps-status.jp-home-subscription.workers.dev/status.json';
 const cards=document.getElementById('cards'),reload=document.getElementById('reload'),refresh=document.getElementById('refresh');
 const allowedHosts=new Set(['app.vmiss.com','clients.zgovps.com','my.rfchost.com','vps.hosting']);
 const words={available:'有货',unavailable:'无货',unknown:'尚未确认'};
@@ -75,7 +75,7 @@ function stockLabel(item,state){return ['available','unavailable'].includes(stat
 function checkedTime(meta){return Number.isFinite(meta.checked)?new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(meta.checked):'等待首次检查';}
 function explanationFor(item,state){return state==='offline'?'暂时无法读取服务器状态，页面将自动重试。':state==='stale'?'最近记录已过期，等待下一次可靠检查。':state==='available'?'已检测到库存，请前往官网确认并下单。':state==='unavailable'?'最近一次可靠检查未发现库存。':(item.explanation||'本轮无法可靠确认库存，等待复查。');}
 function fact(label,value){const node=el('div','fact');node.append(el('div','label',label),el('div','value',value));return node;}
-function actionFor(item){const action=el('div','card-action'),source=el('span','source',item.query_location==='japan-vps-egress'?'经日本备用查询':'经香港查询');const link=el('a','buy-link','前往官网');link.href=safeLink(item.product_url);link.target='_blank';link.rel='noopener noreferrer';link.append(el('span','','↗'));action.append(source,link);return action;}
+function actionFor(item){const action=el('div','card-action'),source=el('span','source',({'japan-home-vps':'日本家宽直查','japan-vps-egress':'原日本备用记录','hong-kong-vps':'原香港记录'}[item.query_location]||'等待日本检查'));const link=el('a','buy-link','前往官网');link.href=safeLink(item.product_url);link.target='_blank';link.rel='noopener noreferrer';link.append(el('span','','↗'));action.append(source,link);return action;}
 function panelHead(provider,subtitle){const head=el('div','panel-head');head.append(el('h2','provider',provider),el('span','provider-host',subtitle));return head;}
 function planFor(item,compact=false){
  const meta=productState(item),state=meta.state,plan=el('section','plan');plan.dataset.state=state;plan.dataset.productId=item.id;

@@ -1,0 +1,10 @@
+[Unit]
+Description=Japan stock checks every eight to twelve minutes
+[Timer]
+OnActiveSec=480
+OnUnitActiveSec=480
+RandomizedDelaySec=240
+AccuracySec=1
+Unit=vps-stock-japan.service
+[Install]
+WantedBy=timers.target

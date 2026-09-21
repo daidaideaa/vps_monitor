@@ -1,0 +1,28 @@
+[Unit]
+Description=Five stock checks and email on JP-HOME-HY2
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=vmiss-monitor
+Group=vmiss-monitor
+WorkingDirectory=/opt/vmiss-public-status
+ExecStart=/opt/vmiss-stock-monitor/.venv/bin/python /opt/vmiss-public-status/run_japan_cycle.py
+Environment=PLAYWRIGHT_BROWSERS_PATH=/opt/vmiss-stock-monitor/.browsers
+Environment=QUERY_LOCATION=japan-home-vps
+Environment=PYTHONUNBUFFERED=1
+Environment=TZ=Asia/Shanghai
+StateDirectory=vps-stock-monitor vmiss-public-status
+UMask=0077
+TimeoutStartSec=420
+KillMode=control-group
+MemoryHigh=220M
+MemoryMax=280M
+MemorySwapMax=192M
+OOMPolicy=stop
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/vmiss-stock-monitor /var/lib/vps-stock-monitor /var/lib/vmiss-public-status

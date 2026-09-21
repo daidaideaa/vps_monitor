@@ -1,0 +1,11 @@
+{
+  "name": "jp-vps-status",
+  "main": "index.mjs",
+  "compatibility_date": "2026-09-21",
+  "workers_dev": true,
+  "preview_urls": false,
+  "send_metrics": false,
+  "observability": {"enabled": false},
+  "durable_objects": {"bindings": [{"name": "STATUS", "class_name": "StatusSnapshot"}]},
+  "migrations": [{"tag": "v1", "new_sqlite_classes": ["StatusSnapshot"]}]
+}
