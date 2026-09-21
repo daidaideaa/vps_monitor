@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test test/*.test.js ../tests/frontend.test.cjs",
+    "test": "node --test test/*.test.js ../tests/frontend.test.cjs && npm run test:runtime",
+    "test:runtime": "workerd test test/runtime.capnp",
     "dev": "wrangler dev --test-scheduled",
     "deploy": "node scripts/deploy.mjs",
     "logs": "wrangler tail"

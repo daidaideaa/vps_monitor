@@ -64,7 +64,8 @@ async function checkTarget(target, fetcher) {
   const timer = setTimeout(() => controller.abort(), 20000);
   try {
     const response = await fetcher(target.product_url, {
-      signal: controller.signal, redirect: 'error', cache: 'no-store',
+      // Workers 运行时只支持 follow / manual；重定向交给下面的状态码检查。
+      signal: controller.signal, redirect: 'manual', cache: 'no-store',
       headers: { Accept: 'text/html,application/xhtml+xml', 'Accept-Language': 'en-US,en;q=0.9',
         'User-Agent': 'VPSStockMonitor/1.0 (+https://github.com/daidaideaa/vps_monitor)',
         'Cache-Control': 'no-cache' },

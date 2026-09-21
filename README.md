@@ -38,7 +38,7 @@ worker/test/                       解析、状态生命周期和 API 测试
 tests/                             VMISS 导出及页面故障隔离测试
 ```
 
-Worker 没有运行时第三方依赖，不使用浏览器、D1、Durable Objects、R2 或第三方数据库。普通 HTTP 出现 403、验证码、超时、重定向、非 HTML/部分响应、套餐边界缺失、标记冲突时保守返回 `unknown`。若商家拒绝 Cloudflare 节点访问，监控会持续显示无法确认，需要后续评估商家允许的访问方式，不能靠历史有货状态掩盖问题。
+Worker 没有运行时第三方依赖，不使用浏览器、D1、Durable Objects、R2 或第三方数据库。普通 HTTP 出现 403、验证码、超时、重定向、非 HTML/部分响应、套餐边界缺失、标记冲突时保守返回 `unknown`。抓取使用 `redirect: 'manual'` 并检查状态码；实际 Workers 运行时不支持 `redirect: 'error'`，不能沿用 Node 的该选项。若商家拒绝 Cloudflare 节点访问，监控会持续显示无法确认，需要后续评估商家允许的访问方式，不能靠历史有货状态掩盖问题。
 
 ZgoCloud 仅识别 `Starter` 到 `Standard` 之间的 `Continue / Out of stock!`；RFCHOST 仅识别 `JP2-CO-Micro-Lite` 到 `JP2-CO-Mini-Lite` 之间唯一的 `N Available`。购买地址直接沿用迁移前仓库的官方 URL。
 
@@ -53,6 +53,8 @@ npm test
 npx wrangler deploy --dry-run
 npx wrangler dev --test-scheduled
 ```
+
+`npm test` 包含 Node 单元测试和真实 workerd 运行时回归测试（无需外网）。后者覆盖请求参数兼容性、HTML 抓取和重定向拒绝，避免 Node mock 接受了线上运行时不支持的参数。可用 `npm run test:runtime` 单独执行。
 
 `npm run dev` 等同于最后一条命令。另开终端，仅向**本地开发服务**模拟一次 scheduled 事件：
 
