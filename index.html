@@ -29,7 +29,7 @@ function draw(){
  document.body.dataset.state=state;
  $('product').textContent=latest.product_name;
  $('status').textContent=({available:'有货了',unavailable:'暂无库存',unknown:'暂时无法确认',stale:'检查数据已过期',offline:'暂时连接不上'})[state]||'暂时无法确认';
- $('health').textContent=({available:'监控正常',unavailable:'监控正常',unknown:'正在恢复检查',stale:'等待服务器更新',offline:'连接异常'})[state]||'等待检查';
+ $('health').textContent=({available:'监控正常',unavailable:'监控正常',unknown:'检查遇到异常',stale:'等待服务器更新',offline:'连接异常'})[state]||'等待检查';
  $('explanation').textContent=state==='offline'?'暂时无法读取服务器状态，保留的记录仅供参考。页面会自动重试。':state==='stale'?'最近的记录已超过有效时间，不能据此判断现在是否有货。':state==='unavailable'?'目标套餐最近一次检查为无货。服务器会继续检查，补货后发送邮件提醒。':state==='available'?'目标套餐已检测到库存，请尽快打开官方页面再次确认。':latest.explanation;
  $('checked').textContent=Number.isFinite(checked)?new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(checked):'尚无记录';
  $('age').textContent=Number.isFinite(seconds)?(seconds<60?'刚刚检查':Math.floor(Math.max(0,seconds)/60)+' 分钟前'):'';
