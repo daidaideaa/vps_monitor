@@ -1,8 +1,8 @@
-/* Inter 4.1 + Noto Sans SC: variable fonts served with the site. */
+/* Locally served variable fonts: soft sans text and editorial serif headings. */
 @font-face {
-  font-family: "Monitor Inter";
-  src: url("./inter-latin.woff2") format("woff2");
-  font-weight: 100 900;
+  font-family: "Monitor Manrope";
+  src: url("./manrope-latin.woff2") format("woff2");
+  font-weight: 200 800;
   font-style: normal;
   font-display: swap;
 }
@@ -28,6 +28,6 @@
   font-display: swap;
 }
 :root {
-  --ui-font: "Monitor Inter", "Monitor Noto SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --ui-font: "Monitor Manrope", "PingFang SC", "MiSans VF", "Monitor Noto SC", "Microsoft YaHei", sans-serif;
   --editorial-font: "Monitor Serif", "Monitor Serif SC", "Songti SC", "SimSun", serif;
 }
