@@ -51,7 +51,19 @@ test('V.PS 合并展示但状态、链接、历史与待确认统计相互独立
     'https://vps.hosting/?action=add&cmd=cart&id=149'
   ]);
   assert.match(p.text(), /当前待确认/);
-  assert.equal(visit(p.nodes.overview).map(node=>node.textContent).join(''), '5套餐2有货2无货1待确认');
+  assert.equal(visit(p.nodes.overview).map(node=>node.textContent).join(''), '2 个套餐有货2 有货 / 2 无货 / 1 待确认');
+});
+
+test('页面同步时间独立于商家实际检查时间，失败不显示同步成功', async () => {
+  let failed = false;
+  const data = snapshot();
+  data.products[1].last_checked = new Date(Date.now()-120000).toISOString();
+  const p = page(async () => { if(failed)throw new Error('network'); return Response.json(data); });
+  await p.run('load()');
+  assert.match(p.nodes.refresh.textContent, /^页面同步于 \d{2}:\d{2}:\d{2}$/);
+  assert.equal(p.run('latest[0].last_checked'), data.products[1].last_checked);
+  failed = true; await p.run('load()');
+  assert.equal(p.nodes.refresh.textContent, '同步失败，稍后重试');
 });
 
 test('VPS 断连保留历史但五个套餐均为 offline，恢复后解除离线', async () => {
