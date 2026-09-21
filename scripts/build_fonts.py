@@ -20,6 +20,10 @@ SOURCES = {
     'noto-sc.ttf': 'https://raw.githubusercontent.com/google/fonts/main/ofl/notosanssc/NotoSansSC%5Bwght%5D.ttf',
     'Inter-OFL.txt': 'https://raw.githubusercontent.com/rsms/inter/v4.1/LICENSE.txt',
     'NotoSansSC-OFL.txt': 'https://raw.githubusercontent.com/google/fonts/main/ofl/notosanssc/OFL.txt',
+    'source-serif.ttf': 'https://raw.githubusercontent.com/google/fonts/main/ofl/sourceserif4/SourceSerif4%5Bopsz,wght%5D.ttf',
+    'noto-serif-sc.ttf': 'https://raw.githubusercontent.com/google/fonts/main/ofl/notoserifsc/NotoSerifSC%5Bwght%5D.ttf',
+    'SourceSerif4-OFL.txt': 'https://raw.githubusercontent.com/google/fonts/main/ofl/sourceserif4/OFL.txt',
+    'NotoSerifSC-OFL.txt': 'https://raw.githubusercontent.com/google/fonts/main/ofl/notoserifsc/OFL.txt',
 }
 for name, url in SOURCES.items():
     destination = CACHE / name
@@ -34,6 +38,7 @@ characters = {ord(c) for p in texts for c in p.read_text(encoding='utf-8') if or
 
 def write_subset(source, name, unicodes):
     font = TTFont(CACHE / source)
+    font.recalcTimestamp = False
     options = subset.Options()
     options.layout_features = ['*']
     cutter = subset.Subsetter(options=options)
@@ -47,8 +52,10 @@ latin = set(range(0x20, 0x250)) | set(range(0x2000, 0x2070)) | {0x20AC, 0x2197, 
 sizes = {
     'inter-latin.woff2': write_subset('inter.woff2', 'inter-latin.woff2', latin),
     'noto-sans-sc-ui.woff2': write_subset('noto-sc.ttf', 'noto-sans-sc-ui.woff2', characters),
+    'source-serif-latin.woff2': write_subset('source-serif.ttf', 'source-serif-latin.woff2', set(range(0x20, 0x7F))),
+    'noto-serif-sc-title.woff2': write_subset('noto-serif-sc.ttf', 'noto-serif-sc-title.woff2', {ord(c) for c in '东京库存观察'}),
 }
-for name in ['Inter-OFL.txt', 'NotoSansSC-OFL.txt']:
+for name in ['Inter-OFL.txt', 'NotoSansSC-OFL.txt', 'SourceSerif4-OFL.txt', 'NotoSerifSC-OFL.txt']:
     (OUT / name).write_bytes((CACHE / name).read_bytes())
 (OUT / 'sources.json').write_text(json.dumps({name: {'url': url, 'sha256': hashlib.sha256((CACHE/name).read_bytes()).hexdigest()} for name,url in SOURCES.items()}, indent=2)+'\n', encoding='utf-8')
 print(json.dumps({'font_bytes': sizes, 'cjk_codepoints': len(characters)}))
