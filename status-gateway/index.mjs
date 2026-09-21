@@ -6,7 +6,7 @@ const targets = new Map([
 ]);
 const fields = ['id', 'provider', 'product_name', 'product_url', 'status', 'last_confirmed', 'last_checked', 'unknown_count', 'stock', 'explanation', 'check_interval_seconds', 'query_location', 'check_interval_min_seconds', 'check_interval_max_seconds', 'last_available_at', 'unavailable_since'];
 export function publicSnapshot(data) {
-  if (data?.schema_version !== 2 || data.query_location !== 'japan-home-vps' || !Array.isArray(data.products) || data.products.length !== 5 || !Number.isFinite(Date.parse(data.published_at))) throw Error('Invalid snapshot');
+  if (data?.schema_version !== 2 || data.query_location !== 'japan-home-vps' || !Array.isArray(data.products) || data.products.length !== 5 || !Number.isFinite(Date.parse(data.published_at)) || Date.parse(data.published_at) > Date.now()+120000) throw Error('Invalid snapshot');
   const ids = new Set();
   const products = data.products.map(p => {
     if (!targets.has(p.id) || ids.has(p.id) || !['available','unavailable','unknown'].includes(p.status)) throw Error('Invalid product');
@@ -23,7 +23,8 @@ export class StatusSnapshot {
     if (request.method === 'PUT') {
       const data = await request.json();
       const old = await this.state.storage.get('latest');
-      if (old && Date.parse(data.published_at) < Date.parse(old.published_at)) return new Response('Older snapshot', {status:409});
+      // A corrected server clock must be able to replace an invalid future snapshot.
+      if (old && Date.parse(old.published_at) <= Date.now()+120000 && Date.parse(data.published_at) < Date.parse(old.published_at)) return new Response('Older snapshot', {status:409});
       await this.state.storage.put('latest',data);
       return new Response(null,{status:204});
     }

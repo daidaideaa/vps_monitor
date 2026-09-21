@@ -37,7 +37,9 @@ VMISS 主程序来自独立项目 vmiss-stock-monitor/monitor.py，部署到 /op
 
 ```bash
 sudo apt update
-sudo apt install -y python3 python3-venv xvfb
+sudo apt install -y python3 python3-venv xvfb systemd-timesyncd
+sudo systemctl enable --now systemd-timesyncd
+timedatectl status
 sudo useradd --system --home /opt/vmiss-stock-monitor --shell /usr/sbin/nologin vmiss-monitor
 sudo python3 -m venv /opt/vmiss-stock-monitor/.venv
 sudo /opt/vmiss-stock-monitor/.venv/bin/pip install -r /opt/vmiss-stock-monitor/requirements.txt
@@ -47,7 +49,7 @@ sudo chmod 700 /opt/vmiss-stock-monitor
 sudo chmod 600 /opt/vmiss-stock-monitor/.env
 ```
 
-小内存 VPS 先确认磁盘和交换空间足够。服务限制实际内存 280 MiB、交换空间 192 MiB，每轮关闭浏览器。资源不足时检查日志，不能放宽库存判断。
+小内存 VPS 先确认磁盘和交换空间足够，并确认时间已同步。服务限制实际内存 280 MiB、交换空间 192 MiB，每轮关闭浏览器。资源不足时检查日志，不能放宽库存判断。网关拒绝超过两分钟的未来导出时间；校时后可以自动替换此前错误的未来快照。
 
 .env 设置 CHECK_INTERVAL_SECONDS=600、ERROR_ALERT_AFTER=10；旧 JAPAN_PROXY_URL 删除或留空，新服务直接使用日本出口。SMTP 支持 587 STARTTLS 和 465 SSL，验证服务器证书；Gmail 使用应用专用密码。
 
