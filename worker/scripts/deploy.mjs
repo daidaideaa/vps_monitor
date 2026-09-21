@@ -14,9 +14,9 @@ try {
   });
   if (result.error || result.status !== 0) throw new Error('Worker 部署失败，前端地址未修改');
   const deployments = readFileSync(outputFile, 'utf8').trim().split('\n').map(line => JSON.parse(line));
-  const deployed = deployments.findLast(entry => entry.type === 'deploy' && entry.worker_name === 'vps-monitor-tokyo');
+  const deployed = deployments.findLast(entry => entry.type === 'deploy' && entry.worker_name === 'vps-monitor');
   const base = deployed?.targets?.find(target => typeof target === 'string' &&
-    /^https:\/\/vps-monitor-tokyo\.[a-z0-9-]+\.workers\.dev\/?$/.test(target));
+    /^https:\/\/vps-monitor\.[a-z0-9-]+\.workers\.dev\/?$/.test(target));
   if (!base) throw new Error('部署输出没有正式 workers.dev 地址，前端未修改');
   const api = new URL('/status.json', base).href;
   const response = await fetch(api, { signal: AbortSignal.timeout(20000), cache: 'no-store' });

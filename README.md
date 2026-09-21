@@ -13,12 +13,12 @@
 GitHub Pages 每 30 秒独立读取两个公开 API，合并展示。VMISS API 中只取 VMISS（兼容单产品 schema v1 和旧三产品 schema v2），另外两家只从 Worker 获取。某个 API 断连只影响对应的卡片。页面刷新不会触发商家抓取。
 
 - VMISS API：[status.json](https://vmiss-status.96-126-179-210.sslip.io/status.json)。VMISS 实际监控、Playwright 与原有邮件逻辑不变。
-- Worker 名称：`vps-monitor-tokyo`。
+- Worker 名称：`vps-monitor`。
 - KV binding：`VPS_MONITOR_KV`；主要 key：`tokyo-vps-status`。
 - Cron：`*/3 * * * *`（UTC，约每 3 分钟）。
 
 <!-- worker-api:start -->
-Worker API：尚未部署；当前执行环境 `wrangler whoami` 显示未登录 Cloudflare。部署脚本验证成功后自动将真实 `/status.json` 地址写入本段和 `index.html`。
+已创建的 Production 地址：[vps-monitor.daidaidefish.workers.dev](https://vps-monitor.daidaidefish.workers.dev)。库存接口部署仍待验证，尚未切换 GitHub Pages；当前执行环境访问 `/status.json` 返回 HTTP 403，用户浏览器下载为空文件。
 <!-- worker-api:end -->
 
 未部署时 `WORKER_API=null`，两张卡明确显示“库存检查尚未启用”，不会访问虚构的 workers.dev 域名。**在部署验证完成并回填地址之前，不应将此次前端切换合入生产分支。**
@@ -70,7 +70,13 @@ python -m pip install python-dotenv
 python -m unittest discover -s tests -v
 ```
 
-## Cloudflare 首次部署
+## Cloudflare 网页部署
+
+进入已创建的 `vps-monitor`，在 Settings / Builds 中连接 `daidaideaa/vps_monitor`，生产部署分支先选 `codex/cloudflare-stock-monitor`（当前 main 尚未包含 Worker 代码），根目录 `worker`，构建命令留空，部署命令 `npx wrangler deploy`。确认生产部署成功后，检查 `/status.json` 是否返回包含两个产品的 JSON；空 KV 也必须返回 JSON，而不是空文件。
+
+网页部署不会将生成的 KV ID 或 API URL 自动提交回 GitHub。验证成功后需将绑定的 KV namespace ID 写回 `worker/wrangler.jsonc`，并回填 `index.html` 的 WORKER_API。合入 main 后，将 Cloudflare 的生产部署分支切换为 main。若返回空文件，请优先检查 Deployments 中是否成功部署了上述分支，而不是仅创建了同名 Worker。
+
+## Cloudflare 命令行部署
 
 ```bash
 cd worker
