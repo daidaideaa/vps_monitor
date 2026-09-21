@@ -64,7 +64,7 @@ class SnapshotTest(unittest.TestCase):
         self.assertEqual(unknown['last_available_at'], available['last_checked'])
         resumed = checked('08:12:00', previous=unknown)
         self.assertEqual(resumed['unavailable_since'], resumed['last_checked'])
-        gap = checked('08:22:00', previous=resumed)
+        gap = checked('08:28:00', previous=resumed)
         self.assertEqual(gap['unavailable_since'], gap['last_checked'])
         self.assertEqual(gap['last_available_at'], available['last_checked'])
 

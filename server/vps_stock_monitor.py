@@ -1,4 +1,4 @@
-"""Query ZgoCloud/RFCHOST on the VPS; no web-triggered checks or credentials."""
+"""Query ZgoCloud/RFCHOST/V.PS on the VPS; no web-triggered checks or credentials."""
 import argparse
 import json
 import logging
@@ -60,16 +60,82 @@ class VisibleText(HTMLParser):
                     frame['text'].append(data)
 
 
-def parse_stock(html, provider):
+class VpsCards(VisibleText):
+    """Read HostBill product cards by ID and heading, including badges before titles."""
+    def __init__(self):
+        super().__init__()
+        self.cards = []
+        self.locations = []
+        self.order_enabled = False
+        self.challenge = False
+
+    def handle_starttag(self, tag, attrs):
+        before = len(self.stack)
+        super().handle_starttag(tag, attrs)
+        if len(self.stack) > before:
+            frame = self.stack[-1]
+            frame.update(attrs=dict(attrs), headings=[], visible_text=[])
+            if not frame['hidden'] and set(dict(attrs).get('class', '').split()) & {'g-recaptcha', 'cf-turnstile', 'h-captcha'}:
+                self.challenge = True
+
+    def handle_data(self, data):
+        super().handle_data(data)
+        if not any(f['hidden'] for f in self.stack):
+            for frame in self.stack:
+                frame['visible_text'].append(data)
+
+    def handle_endtag(self, tag):
+        frame = next((f for f in reversed(self.stack) if f['tag'] == tag), None)
+        if frame and not frame['hidden']:
+            text = ' '.join(' '.join(frame['visible_text']).split())
+            classes = set(frame['attrs'].get('class', '').split())
+            if tag == 'h4':
+                for parent in self.stack:
+                    if 'cart-product' in parent['attrs'].get('class', '').split():
+                        parent['headings'].append(text)
+            if 'cart-product' in classes:
+                self.cards.append({**frame['attrs'], 'headings': frame['headings'], 'text': text})
+            if {'cart-category', 'selected'} <= classes:
+                self.locations.append(text)
+            if (tag == 'button' and frame['order'] and text == 'Order'
+                    and 'submitOrder()' in frame['attrs'].get('onclick', '')
+                    and any(f['attrs'].get('id') == 'orderpage-summary' for f in self.stack)):
+                self.order_enabled = True
+        super().handle_endtag(tag)
+
+
+def parse_vps(html, target):
+    parser = VpsCards()
+    parser.feed(html)
+    if parser.challenge or parser.locations != ['Tokyo'] or not target:
+        return unknown()
+    matches = [c for c in parser.cards if c.get('data-value') == target.get('plan_id')]
+    if len(matches) != 1 or matches[0]['headings'] != [target.get('plan_name')]:
+        return unknown()
+    card = matches[0]
+    classes = set(card.get('class', '').split())
+    # Never infer stock from the marketing site's permanent Order links.
+    if 'outofstock' in classes or re.search(r'\b(?:Out\s+of\s+stock|Sold\s+out)\b', card['text'], re.I):
+        return {'status': 'unavailable', 'stock': 0}
+    selected = [c for c in parser.cards if 'selected' in c.get('class', '').split()]
+    if selected == [card] and parser.order_enabled and not classes & {'disabled', 'unavailable'}:
+        return {'status': 'available', 'stock': None}
+    return unknown()
+
+
+def parse_stock(html, provider, target=None):
     if not isinstance(html, str) or not re.search(r'<(?:html|body|div|h[1-6]|section|form)\b', html, re.I):
         return unknown()
-    if re.search(r'cf-chl-|/cdn-cgi/challenge-platform|g-recaptcha|h-captcha|cf-turnstile', html, re.I):
+    if (re.search(r'cf-chl-|/cdn-cgi/challenge-platform', html, re.I)
+            or (provider != 'V.PS' and re.search(r'g-recaptcha|h-captcha|cf-turnstile', html, re.I))):
         return unknown('网站要求验证，本轮无法确认库存')
     parser = VisibleText()
     parser.feed(html)
     text = re.sub(r'\s+', ' ', ' '.join(parser.parts)).strip()
     if re.search(r'just a moment|checking your browser|verify (?:that )?you are human|access denied|captcha|验证码|人机验证', text, re.I):
         return unknown('网站要求验证，本轮无法确认库存')
+    if provider == 'V.PS':
+        return parse_vps(html, target)
     if provider == 'ZgoCloud':
         if not re.search(r'\bTokyo Intel VPS\b', text):
             return unknown()
@@ -122,7 +188,7 @@ def check_http(target):
             body = response.read(MAX_HTML + 1)
             if len(body) > MAX_HTML:
                 return unknown('商家页面过大，未解析')
-            return parse_stock(body.decode(response.headers.get_content_charset() or 'utf-8', errors='replace'), target['provider'])
+            return parse_stock(body.decode(response.headers.get_content_charset() or 'utf-8', errors='replace'), target['provider'], target)
     except Exception:
         return unknown('商家请求失败、超时或要求验证')
 
@@ -150,7 +216,7 @@ def check_browser(target):
                 html = page.content()
                 if len(html.encode('utf-8')) > MAX_HTML:
                     return unknown('商家页面过大，未解析')
-                return parse_stock(html, target['provider'])
+                return parse_stock(html, target['provider'], target)
             finally:
                 browser.close()
     except Exception:
@@ -199,7 +265,7 @@ def run_once(output=STATE, http_check=check_http, browser_check=check_browser):
         temporary.write_text(json.dumps(data, ensure_ascii=False) + '\n', encoding='utf-8')
         os.chmod(temporary, 0o600)
         temporary.replace(output)
-        LOG.info('%s status=%s method=%s', target['provider'], product['status'], method)
+        LOG.info('%s %s status=%s method=%s', target['provider'], target['product_name'], product['status'], method)
     return data
 
 

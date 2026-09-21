@@ -1,5 +1,5 @@
 [Unit]
-Description=Query ZgoCloud and RFCHOST stock on Hong Kong VPS
+Description=Query ZgoCloud, RFCHOST and V.PS stock on Hong Kong VPS
 After=network-online.target
 Wants=network-online.target
 
@@ -14,7 +14,7 @@ Environment=PYTHONUNBUFFERED=1
 StateDirectory=vps-stock-monitor
 StateDirectoryMode=0700
 UMask=0077
-TimeoutStartSec=150
+TimeoutStartSec=270
 KillMode=control-group
 MemoryMax=300M
 MemorySwapMax=256M

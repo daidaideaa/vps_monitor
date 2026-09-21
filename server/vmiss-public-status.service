@@ -1,5 +1,5 @@
 [Unit]
-Description=Export three public VPS stock statuses
+Description=Export five public VPS stock statuses
 
 [Service]
 Type=oneshot

@@ -2,31 +2,33 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="color-scheme" content="light"><meta name="description" content="东京 VPS 套餐库存状态，三家均由香港 VPS 自动监测。">
+<meta name="color-scheme" content="light"><meta name="description" content="东京 VPS 套餐库存状态，四家均由香港 VPS 自动监测。">
 <title>东京 VPS 库存观察</title>
 <style>
 :root{--ink:#172b3d;--muted:#6d7d89;--line:#dce5eb;--blue:#275ee7;--bg:#f3f6f9}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif}.wrap{max-width:1080px;margin:auto;padding:34px 24px 30px}header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:54px}.brand{font-size:17px;font-weight:750;letter-spacing:.4px}.mark{display:inline-grid;place-items:center;background:var(--ink);color:white;border-radius:10px;width:32px;height:32px;margin-right:10px;font-size:16px}.tag{color:var(--muted);font-size:12px;display:flex;align-items:center;gap:7px}.dot{width:6px;height:6px;border-radius:50%;background:currentColor;display:inline-block}.eyebrow{color:var(--blue);font-size:12px;font-weight:700;letter-spacing:2px}h1{font-size:34px;line-height:1.3;margin:10px 0 12px;letter-spacing:-.8px}.intro{color:var(--muted);margin:0 0 28px}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.panel{--tone:#8c681c;--tint:#fff5d9;background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:0 9px 32px #1d385308;overflow:hidden}.panel[data-state=available]{--tone:#187b53;--tint:#e5f6ed}.panel[data-state=unknown],.panel[data-state=stale],.panel[data-state=offline]{--tone:#a16d13;--tint:#fff3d8}.main{padding:26px}.provider{font-size:11px;font-weight:750;color:var(--blue);letter-spacing:1.2px;text-transform:uppercase}.product{font-size:13px;color:var(--muted);margin:7px 0 18px;min-height:42px}.status-row{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.status{font-size:29px;font-weight:760;line-height:1.2;margin:0;color:var(--tone);letter-spacing:-.5px}.badge{color:var(--tone);background:var(--tint);border-radius:100px;padding:5px 10px;display:flex;align-items:center;gap:6px;font-size:11px;white-space:nowrap}.explanation{color:var(--muted);font-size:12px;margin:12px 0 0;min-height:39px}.facts{border-top:1px solid var(--line);padding:18px 26px;display:grid;gap:12px}.fact{display:flex;justify-content:space-between;gap:15px}.label{color:var(--muted);font-size:11px}.value{font-size:12px;font-weight:650;text-align:right}.small{font-size:10px;color:var(--muted);font-weight:400}.card-action{display:flex;padding:0 26px 24px}.button,button{font:inherit;text-decoration:none;border:1px solid var(--line);padding:9px 14px;border-radius:9px;cursor:pointer;background:white;color:var(--ink);font-size:12px;font-weight:650}.button.primary{background:var(--blue);color:white;border-color:var(--blue);width:100%;text-align:center}.actions{display:flex;align-items:center;gap:12px;margin:22px 0 18px}.refresh{margin-left:auto;color:var(--muted);font-size:12px}.note{font-size:12px;color:var(--muted);padding:17px 0;border-top:1px solid var(--line);display:flex;gap:30px;justify-content:space-between}.note p{margin:0;max-width:760px}.note a{color:var(--muted);white-space:nowrap}footer{margin-top:55px;font-size:11px;color:#8b99a3;text-align:center}.empty{background:#fff;border:1px solid var(--line);border-radius:18px;padding:28px;color:var(--muted)}@media(max-width:860px){.grid{grid-template-columns:1fr}.product,.explanation{min-height:0}}@media(max-width:650px){.wrap{padding:22px 18px}header{margin-bottom:38px}h1{font-size:28px}.actions{flex-wrap:wrap}.refresh{width:100%;margin:0}.note{display:block}.note a{display:inline-block;margin-top:12px}}
 </style>
 </head>
 <body><div class="wrap">
-<header><div class="brand"><span class="mark">V</span>库存观察</div><div class="tag"><span class="dot"></span>自动检查 · 约 3 分钟</div></header>
-<div class="eyebrow">TOKYO VPS</div><h1>东京套餐，现在有货吗？</h1><p class="intro">VMISS、ZgoCloud、RFCHOST 均由香港 VPS 检查；目标监控间隔约 3 分钟。</p>
+<header><div class="brand"><span class="mark">V</span>库存观察</div><div class="tag"><span class="dot"></span>自动检查 · 约 5 分钟</div></header>
+<div class="eyebrow">TOKYO VPS</div><h1>东京套餐，现在有货吗？</h1><p class="intro">VMISS、ZgoCloud、RFCHOST、V.PS 均由香港 VPS 检查；目标监控间隔约 5 分钟。</p>
 <div id="cards" class="grid" aria-live="polite"><div class="empty">正在读取最近一次检查结果。</div></div>
 <div class="actions"><button id="reload" type="button">刷新状态</button><span id="refresh" class="refresh">页面每 30 秒自动更新</span></div>
 <div class="note"><p>检查异常、HTTP 403 或网站验证只会显示“无法确认”，不会沿用为当前有货。超过 3 个检查间隔的记录会标记为过期；购买前仍应打开商家官方页面再次确认。</p><a href="https://github.com/daidaideaa/vps_monitor" target="_blank" rel="noopener noreferrer">项目代码 ↗</a></div>
-<footer>独立库存监控页面 · 非 VMISS / ZgoCloud / RFCHOST 官方服务 · GitHub Pages</footer></div>
+<footer>独立库存监控页面 · 非 VMISS / ZgoCloud / RFCHOST / V.PS 官方服务 · GitHub Pages</footer></div>
 <script>
-// 三家都由香港 VPS 查询，页面刷新只读取已有结果。
+// 四家都由香港 VPS 查询，页面刷新只读取已有结果。
 const VPS_API='https://vmiss-status.96-126-179-210.sslip.io/status.json';
 const cards=document.getElementById('cards'),reload=document.getElementById('reload'),refresh=document.getElementById('refresh');
-const allowedHosts=new Set(['app.vmiss.com','clients.zgovps.com','my.rfchost.com']);
+const allowedHosts=new Set(['app.vmiss.com','clients.zgovps.com','my.rfchost.com','vps.hosting']);
 const words={available:'有货',unavailable:'无货',unknown:'尚未确认'};
 const targets=[
  {id:'vmiss-jp-tky-tri-basic',provider:'VMISS',source:'vps',product_name:'JP.TKY.TRI.Basic',product_url:'https://app.vmiss.com/store/jp-tokyo-tri'},
  {id:'zgocloud-tokyo-intel-starter',provider:'ZgoCloud',source:'vps',product_name:'Tokyo Intel VPS · Starter',product_url:'https://clients.zgovps.com/index.php?/cart/tokyo-intel-vps/'},
- {id:'rfchost-jp2-co-micro-lite',provider:'RFCHOST',source:'vps',product_name:'JP2-CO-Micro-Lite',product_url:'https://my.rfchost.com/index.php?currency=8&rp=/store/jp-2-china-optimization-network-lite'}
+ {id:'rfchost-jp2-co-micro-lite',provider:'RFCHOST',source:'vps',product_name:'JP2-CO-Micro-Lite',product_url:'https://my.rfchost.com/index.php?currency=8&rp=/store/jp-2-china-optimization-network-lite'},
+ {id:'vps-tokyo-cloud-starter',provider:'V.PS',source:'vps',product_name:'Tokyo Cloud KVM · Starter',product_url:'https://vps.hosting/?action=add&cmd=cart&id=148'},
+ {id:'vps-tokyo-cloud-essential',provider:'V.PS',source:'vps',product_name:'Tokyo Cloud KVM · Essential',product_url:'https://vps.hosting/?action=add&cmd=cart&id=149'}
 ];
-let latest=targets.map(target=>({...target,status:'unknown',last_confirmed:'unknown',last_checked:null,stock:null,check_interval_seconds:180,pending:true})),next=30,busy=false;
+let latest=targets.map(target=>({...target,status:'unknown',last_confirmed:'unknown',last_checked:null,stock:null,check_interval_seconds:300,pending:true})),next=30,busy=false;
 function normalize(data,source){
  if(data&&[1,2].includes(data.schema_version)&&Array.isArray(data.products))return data.products;
  if(source==='vps'&&data&&data.schema_version===1&&!data.products&&(!data.provider||data.provider==='VMISS'))return [{...data,id:'vmiss-jp-tky-tri-basic',provider:'VMISS'}];
@@ -47,7 +49,7 @@ function mergeSource(source,products,failed=false){
 }
 function productState(item){
  const checked=Date.parse(item.last_checked),seconds=(Date.now()-checked)/1000;
- const supplied=Number(item.check_interval_seconds),interval=Number.isFinite(supplied)&&supplied>=30?supplied:180;
+ const supplied=Number(item.check_interval_seconds),interval=Number.isFinite(supplied)&&supplied>=30?supplied:300;
  const stale=!Number.isFinite(checked)||seconds>interval*3||seconds < -120;
  const awaitingFirst=item.last_checked===null&&item.status==='unknown'&&item.last_confirmed==='unknown'&&item.unknown_count===0;
  const state=item.sourceFailed?'offline':item.pending||awaitingFirst?'unknown':stale?'stale':item.status;

@@ -11,6 +11,7 @@ id vmiss-monitor >/dev/null
 backup=/var/backups/vps-monitor/$(date -u +%Y%m%dT%H%M%SZ)
 install -d -m 700 "$backup"
 cp -a "$destination" "$backup/public-status" 2>/dev/null || true
+cp -a /opt/vmiss-stock-monitor/.env "$backup/vmiss.env"
 for state_dir in /var/lib/vps-stock-monitor /var/lib/vmiss-public-status; do
     if [ -d "$state_dir" ]; then cp -a "$state_dir" "$backup/"; fi
 done
@@ -18,7 +19,7 @@ done
 trap 'systemctl start vmiss-public-status.timer || true' EXIT
 systemctl stop vmiss-public-status.timer
 systemctl stop vmiss-public-status.service
-# Stop any earlier VPS version of the same two targets before replacing it.
+# Stop any earlier VPS version before replacing it.
 if systemctl cat http-stock-monitor.timer >/dev/null 2>&1; then
     systemctl disable --now http-stock-monitor.timer
 fi
@@ -38,6 +39,18 @@ if [ -f /var/lib/vps-stock-monitor/http-status.json ]; then
     chown vmiss-monitor:vmiss-monitor /var/lib/vps-stock-monitor/http-status.json
 fi
 systemctl daemon-reload
+# Change only the interval; preserve SMTP credentials and VMISS state.
+"$python" - <<'PY'
+from dotenv import set_key
+from pathlib import Path
+import os
+path = Path('/opt/vmiss-stock-monitor/.env')
+owner = path.stat()
+set_key(str(path), 'CHECK_INTERVAL_SECONDS', '300', quote_mode='never')
+os.chown(path, owner.st_uid, owner.st_gid)
+PY
+chmod 600 /opt/vmiss-stock-monitor/.env
+systemctl restart vmiss-stock-monitor
 systemctl start vps-stock-monitor.service
 systemctl enable --now vps-stock-monitor.timer
 systemctl start vmiss-public-status.service

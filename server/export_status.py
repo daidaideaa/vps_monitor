@@ -12,7 +12,7 @@ VMISS_MONITOR = Path('/opt/vmiss-stock-monitor')
 OUTPUT = Path('/var/lib/vmiss-public-status/status.json')
 VPS_STATE = Path('/var/lib/vps-stock-monitor/http-status.json')
 STATES = {'available', 'unavailable', 'unknown'}
-ALLOWED_HOSTS = {'VMISS': 'app.vmiss.com', 'ZgoCloud': 'clients.zgovps.com', 'RFCHOST': 'my.rfchost.com'}
+ALLOWED_HOSTS = {'VMISS': 'app.vmiss.com', 'ZgoCloud': 'clients.zgovps.com', 'RFCHOST': 'my.rfchost.com', 'V.PS': 'vps.hosting'}
 FALLBACK_URLS = {'VMISS': 'https://app.vmiss.com/', **{t['provider']: t['product_url'] for t in TARGETS}}
 
 
@@ -37,7 +37,7 @@ def _explanation(errors, reason, confirmed):
     return '等待首次可靠检查'
 
 
-def _public_product(state, provider, product_id, interval=180):
+def _public_product(state, provider, product_id, interval=INTERVAL):
     confirmed = state.get('last_confirmed', 'unknown')
     if confirmed not in STATES:
         confirmed = 'unknown'
@@ -102,7 +102,7 @@ def _inventory_history(public, previous):
     return {'last_available_at': last_available, 'unavailable_since': since}
 
 
-def snapshot(state, interval=180, previous=None):
+def snapshot(state, interval=INTERVAL, previous=None):
     """只导出 VMISS，保持原有 schema v1 和未知状态语义。"""
     target = state.get('target') or {}
     merged = dict(state)
@@ -122,7 +122,7 @@ def _read_json(path):
         return None
 
 
-def combined_snapshot(vmiss_state, other_state=None, interval=180, previous=None):
+def combined_snapshot(vmiss_state, other_state=None, interval=INTERVAL, previous=None):
     """Only VPS checks are exported. Missing results stay unknown, never fabricated."""
     previous = previous or {}
     old_products = previous.get('products') if isinstance(previous.get('products'), list) else []
@@ -147,7 +147,7 @@ def combined_snapshot(vmiss_state, other_state=None, interval=180, previous=None
 def main():
     vmiss_state = _read_json(VMISS_MONITOR / 'state.json')
     config = dotenv_values(VMISS_MONITOR / '.env')
-    interval = max(30, int(config.get('CHECK_INTERVAL_SECONDS', 180)))
+    interval = max(30, int(config.get('CHECK_INTERVAL_SECONDS', INTERVAL)))
     data = combined_snapshot(vmiss_state or {}, _read_json(VPS_STATE), interval, previous=_read_json(OUTPUT))
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     temporary = OUTPUT.with_suffix('.tmp')
