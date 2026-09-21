@@ -1,0 +1,11 @@
+[Unit]
+Description=Check ZgoCloud and RFCHOST stock every 3 minutes
+
+[Timer]
+OnBootSec=20
+OnUnitActiveSec=180
+AccuracySec=2
+Unit=http-stock-monitor.service
+
+[Install]
+WantedBy=timers.target

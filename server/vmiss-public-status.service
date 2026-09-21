@@ -1,5 +1,5 @@
 [Unit]
-Description=Export public VMISS stock status
+Description=Export public Tokyo VPS stock status
 
 [Service]
 Type=oneshot

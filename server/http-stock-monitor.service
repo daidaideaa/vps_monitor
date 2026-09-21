@@ -1,0 +1,19 @@
+[Unit]
+Description=Check ZgoCloud and RFCHOST VPS stock
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=vmiss-monitor
+Group=vmiss-monitor
+ExecStart=/opt/vmiss-stock-monitor/.venv/bin/python /opt/vmiss-public-status/http_stock_monitor.py --state /var/lib/vps-stock-monitor/http-status.json
+StateDirectory=vps-stock-monitor
+StateDirectoryMode=0755
+UMask=0022
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/vps-stock-monitor
+MemoryMax=320M
