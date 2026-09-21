@@ -79,7 +79,7 @@ test('540 秒边界与不同 interval 的 stale 语义', () => {
   assert.equal(p.run("productState({status:'available',last_checked:new Date(819000).toISOString(),check_interval_seconds:60}).state"), 'stale');
 });
 
-test('首次检查前 unknown，历史显示北京时间，unknown 或过期不累计无货', () => {
+test('首次检查前 unknown，历史显示北京时间，unknown 或过期保留无货起点并标为待确认', () => {
   const p = page();
   p.run("latest[1]={...latest[1],pending:false,unknown_count:0,explanation:'等待首次定时检查'};draw()");
   assert.equal(p.states()[1], 'unknown');
@@ -88,16 +88,16 @@ test('首次检查前 unknown，历史显示北京时间，unknown 或过期不�
   const history = state => p.run(`inventoryHistory(${JSON.stringify(item)}, '${state}')`);
   assert.equal(history('unavailable')[0][1], '2 天 2 小时 5 分钟');
   assert.match(history('unavailable')[1][1], /2026.*09.*21.*09:57/);
-  assert.equal(history('unknown')[0][1], '暂时无法确认');
-  assert.equal(history('stale')[0][1], '检查数据已过期');
+  assert.equal(history('unknown')[0][1], '2 天 2 小时 5 分钟（当前待确认）');
+  assert.equal(history('stale')[0][1], '2 天 2 小时 5 分钟（当前待确认）');
   assert.equal(history('available')[0][1], '当前有货');
   assert.equal(p.run("inventoryHistory({}, 'unavailable')[0][1]"), '尚无记录');
 });
 
-test('V.PS 套餐按唯一 ID 区分，允许官方购买链接，默认五分钟', () => {
+test('V.PS 套餐按唯一 ID 区分，允许官方购买链接，默认十分钟并随机抖动', () => {
   const p = page();
   assert.equal(p.run('latest.length'), 5);
-  assert.equal(p.run('latest.every(item => item.check_interval_seconds === 300)'), true);
+  assert.equal(p.run('latest.every(item => item.check_interval_seconds === 600)'), true);
   assert.match(p.run('safeLink(targets[3].product_url)'), /vps\.hosting/);
-  assert.equal(p.run("productState({}).interval"), 300);
+  assert.equal(p.run("productState({}).interval"), 600);
 });

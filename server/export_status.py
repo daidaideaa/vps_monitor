@@ -66,7 +66,9 @@ def _public_product(state, provider, product_id, interval=INTERVAL):
         'stock': stock,
         'explanation': _explanation(errors, state.get('last_unknown_reason'), confirmed),
         'check_interval_seconds': max(30, int(interval)),
-        'query_location': 'hong-kong-vps',
+        'query_location': state.get('query_location') if state.get('query_location') in {'hong-kong-vps', 'japan-vps-egress'} else 'hong-kong-vps',
+        'check_interval_min_seconds': 480,
+        'check_interval_max_seconds': 720,
     }
 
 
@@ -89,16 +91,16 @@ def _inventory_history(public, previous):
     last_available = previous.get('last_available_at')
     if _timestamp(last_available) is None:
         last_available = previous.get('last_checked') if previous.get('status') == 'available' and old_checked is not None else None
-    since = None
+    old_since = previous.get('unavailable_since')
+    since = old_since if _timestamp(old_since) is not None else None
     if checked is not None and (old_checked is None or checked >= old_checked):
         if public['status'] == 'available':
             last_available = public['last_checked']
+            since = None
         elif public['status'] == 'unavailable':
-            old_since = previous.get('unavailable_since')
-            continuous = (previous.get('status') == 'unavailable' and old_checked is not None
-                          and checked - old_checked <= 3 * public['check_interval_seconds']
-                          and _timestamp(old_since) is not None and _timestamp(old_since) <= checked)
-            since = old_since if continuous else public['last_checked']
+            since = since if _timestamp(since) is not None and _timestamp(since) <= checked else public['last_checked']
+        # Unknown observations and missed checks do not prove a restock.
+        # Retain this episode until a confirmed available result ends it.
     return {'last_available_at': last_available, 'unavailable_since': since}
 
 

@@ -15,4 +15,4 @@ TARGETS = (
      'product_url': 'https://vps.hosting/?action=add&cmd=cart&id=149',
      'plan_id': '149', 'plan_name': 'Essential'},
 )
-INTERVAL = 300
+INTERVAL = 600

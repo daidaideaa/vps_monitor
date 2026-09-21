@@ -1,0 +1,22 @@
+[Unit]
+Description=Private Japan egress for fallback inventory checks
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/vps-monitor-japan/config.json
+
+[Service]
+Type=simple
+User=vmiss-monitor
+Group=vmiss-monitor
+ExecStart=/usr/local/libexec/hk-direct-hysteria client -c /etc/vps-monitor-japan/config.json
+Restart=on-failure
+RestartSec=15
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+UMask=0077
+MemoryMax=64M
+
+[Install]
+WantedBy=multi-user.target

@@ -1,10 +1,10 @@
 [Unit]
-Description=Check ZgoCloud, RFCHOST and V.PS about every five minutes
+Description=Check stock at random intervals of eight to twelve minutes
 
 [Timer]
-OnActiveSec=300
-OnUnitActiveSec=300
-RandomizedDelaySec=10
+OnActiveSec=480
+OnUnitInactiveSec=480
+RandomizedDelaySec=240
 AccuracySec=1
 Unit=vps-stock-monitor.service
 

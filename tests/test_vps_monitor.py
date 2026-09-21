@@ -56,6 +56,10 @@ class ParserTest(unittest.TestCase):
                 self.assertEqual(parse(card)['status'], 'unknown')
         self.assertEqual(parse('<!-- 3 Available --><script>3 Available</script>0 Available')['stock'], 0)
         self.assertEqual(parse('Verify you are human 3 Available')['status'], 'unknown')
+        self.assertEqual(parse('<script src="/cdn-cgi/challenge-platform/scripts/jsd/main.js"></script>0 Available')['status'], 'unavailable')
+        for prefix in ['Performing security verification', '<div class="cf-chl-box"></div>',
+                       '<script src="/cdn-cgi/challenge-platform/h/g/orchestrate/chl_page/v1"></script>']:
+            self.assertEqual(parse(prefix + '<script src="/cdn-cgi/challenge-platform/scripts/jsd/main.js"></script>3 Available')['status'], 'unknown')
 
     def test_zgo(self):
         def parse(card):
@@ -91,7 +95,7 @@ class StateTest(unittest.TestCase):
         resumed = update('00:12:00', 'unavailable', unknown)
         self.assertEqual(resumed['unavailable_since'], resumed['last_checked'])
         gap = update('00:28:00', 'unavailable', resumed)
-        self.assertEqual(gap['unavailable_since'], gap['last_checked'])
+        self.assertEqual(gap['unavailable_since'], resumed['unavailable_since'])
         self.assertEqual(gap['last_available_at'], available['last_checked'])
 
     def test_http_success_skips_browser_unknown_falls_back(self):
@@ -106,7 +110,7 @@ class StateTest(unittest.TestCase):
             result = run_once(path, http, browser)
             self.assertEqual(browser_calls, ['RFCHOST'])
             self.assertEqual([p['status'] for p in result['products']], ['unavailable', 'available', 'unavailable', 'unavailable'])
-            self.assertTrue(all(p['check_interval_seconds'] == 300 for p in result['products']))
+            self.assertTrue(all(p['check_interval_seconds'] == 600 for p in result['products']))
             self.assertEqual(json.loads(path.read_text(encoding='utf-8')), result)
 
     def test_first_result_survives_later_unexpected_failure(self):
@@ -127,7 +131,7 @@ class StateTest(unittest.TestCase):
         result = combined_snapshot({}, {'products': [current]})
         self.assertEqual([p['provider'] for p in result['products']], ['VMISS', 'ZgoCloud', 'RFCHOST', 'V.PS', 'V.PS'])
         self.assertEqual([p['status'] for p in result['products']], ['unknown'] * 5)
-        self.assertTrue(all(p['check_interval_seconds'] == 300 for p in result['products']))
+        self.assertTrue(all(p['check_interval_seconds'] == 600 for p in result['products']))
         self.assertTrue(all(p['query_location'] == 'hong-kong-vps' for p in result['products']))
         self.assertEqual(result['products'][2]['last_available_at'], old['last_checked'])
         self.assertIsNone(result['products'][2]['stock'])

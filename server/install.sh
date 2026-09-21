@@ -46,7 +46,8 @@ from pathlib import Path
 import os
 path = Path('/opt/vmiss-stock-monitor/.env')
 owner = path.stat()
-set_key(str(path), 'CHECK_INTERVAL_SECONDS', '300', quote_mode='never')
+set_key(str(path), 'CHECK_INTERVAL_SECONDS', '600', quote_mode='never')
+set_key(str(path), 'JAPAN_PROXY_URL', 'http://127.0.0.1:10882', quote_mode='never')
 os.chown(path, owner.st_uid, owner.st_gid)
 PY
 chmod 600 /opt/vmiss-stock-monitor/.env

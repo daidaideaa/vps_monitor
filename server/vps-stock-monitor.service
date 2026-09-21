@@ -11,10 +11,11 @@ WorkingDirectory=/opt/vmiss-public-status
 ExecStart=/opt/vmiss-stock-monitor/.venv/bin/python /opt/vmiss-public-status/vps_stock_monitor.py --once
 Environment=PLAYWRIGHT_BROWSERS_PATH=/opt/vmiss-stock-monitor/.browsers
 Environment=PYTHONUNBUFFERED=1
+Environment=JAPAN_PROXY_URL=http://127.0.0.1:10882
 StateDirectory=vps-stock-monitor
 StateDirectoryMode=0700
 UMask=0077
-TimeoutStartSec=270
+TimeoutStartSec=470
 KillMode=control-group
 MemoryMax=300M
 MemorySwapMax=256M
