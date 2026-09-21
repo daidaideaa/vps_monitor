@@ -21,7 +21,7 @@ GitHub Pages 每 30 秒独立读取两个公开 API，合并展示。VMISS API �
 Worker API：[status.json](https://vps-monitor.daidaidefish.workers.dev/status.json)。2026-09-21 已验证正式接口返回 HTTP 200、两家产品的 JSON，以及 CORS / no-store / nosniff 响应头；验证时状态为“等待首次定时检查”，Cron 执行结果仍待确认。
 <!-- worker-api:end -->
 
-`index.html` 已回填上述正式 API 地址。前端变更目前仍在 `codex/cloudflare-stock-monitor` 分支，尚未合入 main；首次 Cron 和 KV 写入验证完成后再切换 GitHub Pages。
+`index.html` 已固定使用上述正式 API。GitHub Pages 从 main 发布，无需构建；Worker 的代码和定时配置位于 `worker/`。
 
 ## 文件职责
 
@@ -72,9 +72,13 @@ python -m unittest discover -s tests -v
 
 ## Cloudflare 网页部署
 
-进入已创建的 `vps-monitor`，在 Settings / Builds 中连接 `daidaideaa/vps_monitor`，生产部署分支先选 `codex/cloudflare-stock-monitor`（当前 main 尚未包含 Worker 代码），根目录 `worker`，构建命令留空，部署命令 `npx wrangler deploy`。确认生产部署成功后，检查 `/status.json` 是否返回包含两个产品的 JSON；空 KV 也必须返回 JSON，而不是空文件。
+进入已创建的 `vps-monitor`，在 Settings / Builds 中连接 `daidaideaa/vps_monitor`，根目录 `worker`，构建命令留空，部署命令 `npx wrangler deploy`。合并本次迁移后，将 Production branch 从 `codex/cloudflare-stock-monitor` 改为 `main`，之后主分支更新即可自动部署。修改分支后应触发一次新的生产构建；旧的预览构建重试不能代替生产部署。
 
-网页部署不会将生成的 KV ID 或 API URL 自动提交回 GitHub。验证成功后需将绑定的 KV namespace ID 写回 `worker/wrangler.jsonc`，并回填 `index.html` 的 WORKER_API。合入 main 后，将 Cloudflare 的生产部署分支切换为 main。若返回空文件，请优先检查 Deployments 中是否成功部署了上述分支，而不是仅创建了同名 Worker。
+`Version command: npx wrangler versions upload` 可保留为非生产分支的预览命令，它不会将新版本正式上线。确认生产部署成功后，检查 `/status.json` 是否返回包含两个产品的 JSON；空 KV 也必须返回 JSON，而不是空文件。
+
+网页部署不会将生成的 KV ID 自动提交回 GitHub。当前配置采用 Wrangler 自动配置资源：同一 Worker 的同名 `VPS_MONITOR_KV` binding 在后续部署时复用已有 namespace，无需为了重部署手动新建 KV。如需显式固定 ID，可从控制台 Bindings 读取 namespace ID 后写入 `worker/wrangler.jsonc`；不要更改 Worker 名称或删除已有 binding，以免丢失历史状态。
+
+若接口返回空文件，请检查本次构建是否运行 `wrangler deploy`、生产版本是否承接流量，以及 Root directory 是否为 `worker`。
 
 ## Cloudflare 命令行部署
 
