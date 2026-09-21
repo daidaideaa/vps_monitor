@@ -1,4 +1,4 @@
-/* Locally served variable fonts: soft sans text and editorial serif headings. */
+/* One sans-serif hierarchy for headings, interface text and figures. */
 @font-face {
   font-family: "Monitor Manrope";
   src: url("./manrope-latin.woff2") format("woff2");
@@ -13,21 +13,6 @@
   font-style: normal;
   font-display: swap;
 }
-@font-face {
-  font-family: "Monitor Serif";
-  src: url("./source-serif-latin.woff2") format("woff2");
-  font-weight: 200 900;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Monitor Serif SC";
-  src: url("./noto-serif-sc-title.woff2") format("woff2");
-  font-weight: 200 900;
-  font-style: normal;
-  font-display: swap;
-}
 :root {
   --ui-font: "Monitor Manrope", "PingFang SC", "MiSans VF", "Monitor Noto SC", "Microsoft YaHei", sans-serif;
-  --editorial-font: "Monitor Serif", "Monitor Serif SC", "Songti SC", "SimSun", serif;
 }
