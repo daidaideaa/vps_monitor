@@ -1,8 +1,15 @@
 /* One sans-serif hierarchy for headings, interface text and figures. */
 @font-face {
-  font-family: "Monitor Manrope";
-  src: url("./manrope-latin.woff2") format("woff2");
-  font-weight: 200 800;
+  font-family: "Monitor OpenAI Sans";
+  src: url("./openai-regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Monitor OpenAI Sans";
+  src: url("./openai-medium.woff2") format("woff2");
+  font-weight: 500;
   font-style: normal;
   font-display: swap;
 }
@@ -14,5 +21,5 @@
   font-display: swap;
 }
 :root {
-  --ui-font: "Monitor Manrope", "PingFang SC", "MiSans VF", "Monitor Noto SC", "Microsoft YaHei", sans-serif;
+  --ui-font: "Monitor OpenAI Sans", "PingFang SC", "MiSans VF", "Monitor Noto SC", "Microsoft YaHei", sans-serif;
 }

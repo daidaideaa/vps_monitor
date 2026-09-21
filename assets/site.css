@@ -55,7 +55,7 @@ h1 { margin: 0 0 18px; font-size: 48px; font-weight: 500; line-height: 1.2; lett
 .overview[data-state=unknown] .main-count, .overview[data-state=unknown] .dot { color: var(--amber); }
 .dot { width: 6px; height: 6px; background: currentColor; border-radius: 50%; flex-shrink: 0; display: inline-block; }
 .actions { display: flex; align-items: center; gap: 15px; flex-shrink: 0; }
-.refresh { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.refresh { font-size: 12px; color: var(--muted); }
 button { display: flex; align-items: center; gap: 7px; padding: 9px 16px; border: 1px solid var(--ink); border-radius: 24px; background: var(--ink); color: #fff; font-size: 13px; font-weight: 500; cursor: pointer; }
 button svg { width: 13px; height: 13px; }
 button:hover { background: #292a24; }
@@ -76,7 +76,7 @@ button:disabled { opacity: .55; cursor: wait; }
 .plan-note { margin: -7px 0 18px; font-size: 12px; line-height: 1.7; color: var(--amber); overflow-wrap: anywhere; }
 .facts { display: grid; grid-template-columns: 1.18fr 1fr; gap: 18px; margin-bottom: 24px; }
 .label { color: var(--muted); font-size: 13px; }
-.value { margin-top: 7px; font-size: 17px; line-height: 1.6; letter-spacing: -.01em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.value { margin-top: 7px; font-size: 17px; line-height: 1.6; letter-spacing: -.01em; overflow-wrap: anywhere; }
 .facts .fact:first-child .value { font-size: 16px; }
 .plan-details { font-size: 13px; color: var(--muted); margin-top: auto; }
 .plan-details summary { cursor: pointer; width: fit-content; }

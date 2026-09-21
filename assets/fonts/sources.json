@@ -1,15 +1,7 @@
 {
-  "manrope.ttf": {
-    "url": "https://raw.githubusercontent.com/google/fonts/main/ofl/manrope/Manrope%5Bwght%5D.ttf",
-    "sha256": "3ae11c49db0455a3cc33e37d380f20fdb8c7f8b41dc07625c177e3d87a9d6ae6"
-  },
   "noto-sc.ttf": {
     "url": "https://raw.githubusercontent.com/google/fonts/main/ofl/notosanssc/NotoSansSC%5Bwght%5D.ttf",
     "sha256": "a3041811a78c361b1de50f953c805e0244951c21c5bd412f7232ef0d899af0da"
-  },
-  "Manrope-OFL.txt": {
-    "url": "https://raw.githubusercontent.com/google/fonts/main/ofl/manrope/OFL.txt",
-    "sha256": "58172e0c0fac2cda8a37b348164bb55e44b0e69051e557e92b1d3f6910141f7b"
   },
   "NotoSansSC-OFL.txt": {
     "url": "https://raw.githubusercontent.com/google/fonts/main/ofl/notosanssc/OFL.txt",
@@ -70,5 +62,15 @@
   "misans-cs.64e92d707619091c.14.woff2": {
     "url": "https://cdn-file.hyperos.mi.com/mi-font-service/misans_vf/VF/cs.64e92d707619091c.14.woff2",
     "sha256": "a019b3c0e37fb7def05627cd7dd1f678ce9c1fe76e5f9988bafec40218c21945"
+  },
+  "openai-regular.otf": {
+    "source": "Owner-provided OpenAI Sans.zip",
+    "member": "OpenAI Sans Regular.otf",
+    "sha256": "09556c1fc0c94db268231c92c34c6fbb417b5eb01e623c559a9e74c9efdd08e5"
+  },
+  "openai-medium.otf": {
+    "source": "Owner-provided OpenAI Sans.zip",
+    "member": "OpenAI Sans Medium.otf",
+    "sha256": "5ae69eb1eae6ae8e4f9ceb7e883dff55235411142cf9bf743b09d8cd7980d9e8"
   }
 }
