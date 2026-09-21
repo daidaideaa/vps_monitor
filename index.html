@@ -2,34 +2,57 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="color-scheme" content="light"><meta name="description" content="东京 VPS 套餐库存状态，由香港 VPS 自动监测。">
+<meta name="color-scheme" content="light"><meta name="description" content="东京 VPS 套餐库存状态，由香港 VPS 与 Cloudflare Worker 自动监测。">
 <title>东京 VPS 库存观察</title>
 <style>
 :root{--ink:#172b3d;--muted:#6d7d89;--line:#dce5eb;--blue:#275ee7;--bg:#f3f6f9}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif}.wrap{max-width:1080px;margin:auto;padding:34px 24px 30px}header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:54px}.brand{font-size:17px;font-weight:750;letter-spacing:.4px}.mark{display:inline-grid;place-items:center;background:var(--ink);color:white;border-radius:10px;width:32px;height:32px;margin-right:10px;font-size:16px}.tag{color:var(--muted);font-size:12px;display:flex;align-items:center;gap:7px}.dot{width:6px;height:6px;border-radius:50%;background:currentColor;display:inline-block}.eyebrow{color:var(--blue);font-size:12px;font-weight:700;letter-spacing:2px}h1{font-size:34px;line-height:1.3;margin:10px 0 12px;letter-spacing:-.8px}.intro{color:var(--muted);margin:0 0 28px}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.panel{--tone:#8c681c;--tint:#fff5d9;background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:0 9px 32px #1d385308;overflow:hidden}.panel[data-state=available]{--tone:#187b53;--tint:#e5f6ed}.panel[data-state=unknown],.panel[data-state=stale],.panel[data-state=offline]{--tone:#a16d13;--tint:#fff3d8}.main{padding:26px}.provider{font-size:11px;font-weight:750;color:var(--blue);letter-spacing:1.2px;text-transform:uppercase}.product{font-size:13px;color:var(--muted);margin:7px 0 18px;min-height:42px}.status-row{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.status{font-size:29px;font-weight:760;line-height:1.2;margin:0;color:var(--tone);letter-spacing:-.5px}.badge{color:var(--tone);background:var(--tint);border-radius:100px;padding:5px 10px;display:flex;align-items:center;gap:6px;font-size:11px;white-space:nowrap}.explanation{color:var(--muted);font-size:12px;margin:12px 0 0;min-height:39px}.facts{border-top:1px solid var(--line);padding:18px 26px;display:grid;gap:12px}.fact{display:flex;justify-content:space-between;gap:15px}.label{color:var(--muted);font-size:11px}.value{font-size:12px;font-weight:650;text-align:right}.small{font-size:10px;color:var(--muted);font-weight:400}.card-action{display:flex;padding:0 26px 24px}.button,button{font:inherit;text-decoration:none;border:1px solid var(--line);padding:9px 14px;border-radius:9px;cursor:pointer;background:white;color:var(--ink);font-size:12px;font-weight:650}.button.primary{background:var(--blue);color:white;border-color:var(--blue);width:100%;text-align:center}.actions{display:flex;align-items:center;gap:12px;margin:22px 0 18px}.refresh{margin-left:auto;color:var(--muted);font-size:12px}.note{font-size:12px;color:var(--muted);padding:17px 0;border-top:1px solid var(--line);display:flex;gap:30px;justify-content:space-between}.note p{margin:0;max-width:760px}.note a{color:var(--muted);white-space:nowrap}footer{margin-top:55px;font-size:11px;color:#8b99a3;text-align:center}.empty{background:#fff;border:1px solid var(--line);border-radius:18px;padding:28px;color:var(--muted)}@media(max-width:860px){.grid{grid-template-columns:1fr}.product,.explanation{min-height:0}}@media(max-width:650px){.wrap{padding:22px 18px}header{margin-bottom:38px}h1{font-size:28px}.actions{flex-wrap:wrap}.refresh{width:100%;margin:0}.note{display:block}.note a{display:inline-block;margin-top:12px}}
 </style>
 </head>
 <body><div class="wrap">
-<header><div class="brand"><span class="mark">V</span>库存观察</div><div class="tag"><span class="dot"></span>香港 VPS · 自动检查</div></header>
+<header><div class="brand"><span class="mark">V</span>库存观察</div><div class="tag"><span class="dot"></span>自动检查 · 约 3 分钟</div></header>
 <div class="eyebrow">TOKYO VPS</div><h1>东京套餐，现在有货吗？</h1><p class="intro">VMISS、ZgoCloud、RFCHOST 统一展示；目标监控间隔均为约 3 分钟。</p>
-<div id="cards" class="grid" aria-live="polite"><div class="empty">正在连接香港 VPS 获取最近一次检查结果。</div></div>
+<div id="cards" class="grid" aria-live="polite"><div class="empty">正在读取最近一次检查结果。</div></div>
 <div class="actions"><button id="reload" type="button">刷新状态</button><span id="refresh" class="refresh">页面每 30 秒自动更新</span></div>
 <div class="note"><p>检查异常、HTTP 403 或网站验证只会显示“无法确认”，不会沿用为当前有货。超过 3 个检查间隔的记录会标记为过期；购买前仍应打开商家官方页面再次确认。</p><a href="https://github.com/daidaideaa/vps_monitor" target="_blank" rel="noopener noreferrer">项目代码 ↗</a></div>
 <footer>独立库存监控页面 · 非 VMISS / ZgoCloud / RFCHOST 官方服务 · GitHub Pages</footer></div>
 <script>
-const API='https://vmiss-status.96-126-179-210.sslip.io/status.json';
+const VMISS_API='https://vmiss-status.96-126-179-210.sslip.io/status.json';
+// Cloudflare 正式接口；页面读取不会触发商家检查。
+const WORKER_API="https://vps-monitor.daidaidefish.workers.dev/status.json";
 const cards=document.getElementById('cards'),reload=document.getElementById('reload'),refresh=document.getElementById('refresh');
 const allowedHosts=new Set(['app.vmiss.com','clients.zgovps.com','my.rfchost.com']);
 const words={available:'有货',unavailable:'无货',unknown:'尚未确认'};
-let latest=null,next=30,busy=false,networkFailed=false;
-function normalize(data){
- if(data&&data.schema_version===2&&Array.isArray(data.products))return data.products;
- if(data&&data.schema_version===1)return [{id:'vmiss-jp-tky-tri-basic',provider:'VMISS',...data}];
+const targets=[
+ {id:'vmiss-jp-tky-tri-basic',provider:'VMISS',source:'vmiss',product_name:'JP.TKY.TRI.Basic',product_url:'https://app.vmiss.com/store/jp-tokyo-tri'},
+ {id:'zgocloud-tokyo-intel-starter',provider:'ZgoCloud',source:'worker',product_name:'Tokyo Intel VPS · Starter',product_url:'https://clients.zgovps.com/index.php?/cart/tokyo-intel-vps/'},
+ {id:'rfchost-jp2-co-micro-lite',provider:'RFCHOST',source:'worker',product_name:'JP2-CO-Micro-Lite',product_url:'https://my.rfchost.com/index.php?currency=8&rp=/store/jp-2-china-optimization-network-lite'}
+];
+let latest=targets.map(target=>({...target,status:'unknown',last_confirmed:'unknown',last_checked:null,stock:null,check_interval_seconds:180,pending:true})),next=30,busy=false;
+function normalize(data,source){
+ if(data&&[1,2].includes(data.schema_version)&&Array.isArray(data.products))return data.products;
+ if(source==='vmiss'&&data&&data.schema_version===1&&!data.products&&(!data.provider||data.provider==='VMISS'))return [{...data,id:'vmiss-jp-tky-tri-basic',provider:'VMISS'}];
  throw new Error('Data');
 }
+function mergeSource(source,products,failed=false){
+ latest=latest.map((old,index)=>{
+  const target=targets[index];if(target.source!==source)return old;
+  if(failed)return {...old,pending:false,sourceFailed:true};
+  const matches=products.filter(item=>item&&item.provider===target.provider&&(source==='vmiss'||item.id===target.id));
+  if(matches.length!==1)return {...old,pending:false,sourceFailed:true};
+  const item=matches[0],status=Object.hasOwn(words,item.status)&&!(Number(item.unknown_count)>0)?item.status:'unknown';
+  return {...item,...target,product_name:source==='vmiss'?(item.product_name||target.product_name):target.product_name,
+   product_url:source==='vmiss'?(item.product_url||target.product_url):target.product_url,
+   status,last_confirmed:Object.hasOwn(words,item.last_confirmed)?item.last_confirmed:'unknown',
+   stock:status==='unknown'?null:item.stock,sourceFailed:false,pending:false};
+ });
+}
 function productState(item){
- const checked=Date.parse(item.last_checked),seconds=(Date.now()-checked)/1000,interval=Math.max(30,Number(item.check_interval_seconds)||180);
- const stale=!Number.isFinite(checked)||seconds>Math.max(540,interval*3)||seconds < -120;
- return {state:networkFailed?'offline':stale?'stale':item.status,checked,seconds,interval};
+ const checked=Date.parse(item.last_checked),seconds=(Date.now()-checked)/1000;
+ const supplied=Number(item.check_interval_seconds),interval=Number.isFinite(supplied)&&supplied>=30?supplied:180;
+ const stale=!Number.isFinite(checked)||seconds>interval*3||seconds < -120;
+ const awaitingFirst=item.last_checked===null&&item.status==='unknown'&&item.last_confirmed==='unknown'&&item.unknown_count===0;
+ const state=item.sourceFailed?'offline':item.pending||awaitingFirst?'unknown':stale?'stale':item.status;
+ return {state,checked,seconds,interval};
 }
 function safeLink(value){try{const url=new URL(value);return url.protocol==='https:'&&allowedHosts.has(url.hostname)?url.href:'#';}catch(e){return '#';}}
 function cardFor(item){
@@ -39,23 +62,32 @@ function cardFor(item){
  const provider=document.createElement('div');provider.className='provider';provider.textContent=item.provider||'VPS';
  const product=document.createElement('div');product.className='product';product.textContent=item.product_name||'未知套餐';
  const row=document.createElement('div');row.className='status-row';
- const status=document.createElement('h2');status.className='status';status.textContent=({available:'有货了',unavailable:'暂无库存',unknown:'暂时无法确认',stale:'检查数据已过期',offline:'暂时连接不上'})[state]||'暂时无法确认';
+ const status=document.createElement('h2');status.className='status';status.textContent=({available:'有货了',unavailable:'暂无库存',unknown:'暂时无法确认',stale:'检查数据已过期',offline:'连接异常'})[state]||'暂时无法确认';
  const badge=document.createElement('div');badge.className='badge';badge.innerHTML='<span class="dot"></span><span></span>';badge.lastChild.textContent=({available:'监控正常',unavailable:'监控正常',unknown:'检查异常',stale:'等待更新',offline:'连接异常'})[state]||'等待检查';row.append(status,badge);
  const explanation=document.createElement('p');explanation.className='explanation';explanation.textContent=state==='offline'?'暂时无法读取服务器状态，页面会自动重试。':state==='stale'?'最近记录已超过有效时间，不能据此判断当前库存。':state==='available'?'目标套餐已检测到库存，请尽快打开官方页面确认。':state==='unavailable'?'目标套餐最近一次可靠检查为无货。':(item.explanation||'本轮无法可靠确认库存。');main.append(provider,product,row,explanation);
  const facts=document.createElement('div');facts.className='facts';
  const checked=Number.isFinite(meta.checked)?new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(meta.checked):'尚无记录';
  const age=Number.isFinite(meta.seconds)?(meta.seconds<60?'刚刚检查':Math.floor(Math.max(0,meta.seconds)/60)+' 分钟前'):'';
  const values=[['最近检查 · 北京时间',checked+(age?' · '+age:'')],['检查频率',meta.interval>=60?'约 '+Math.round(meta.interval/60)+' 分钟':meta.interval+' 秒'],['最近确认库存',words[item.last_confirmed]||'尚未确认']];
- if(Number.isInteger(item.stock))values.push(['商家库存数字',String(item.stock)]);
+ if(['available','unavailable'].includes(state)&&Number.isInteger(item.stock)&&item.stock>=0)values.push(['商家库存数字',String(item.stock)]);
  values.forEach(([label,value])=>{const fact=document.createElement('div');fact.className='fact';const l=document.createElement('div');l.className='label';l.textContent=label;const v=document.createElement('div');v.className='value';v.textContent=value;fact.append(l,v);facts.append(fact)});
  const action=document.createElement('div');action.className='card-action';const link=document.createElement('a');link.className='button primary';link.href=safeLink(item.product_url);link.target='_blank';link.rel='noopener noreferrer';link.textContent='查看官方套餐 ↗';action.append(link);panel.append(main,facts,action);return panel;
 }
 function draw(){if(!latest)return;cards.replaceChildren(...latest.map(cardFor));}
+async function loadSource(source,url){
+ if(!url){latest=latest.map(item=>item.source===source?{...item,pending:true,explanation:'库存检查尚未启用'}:item);draw();return;}
+ try{
+  const response=await fetch(url,{cache:'no-store',signal:AbortSignal.timeout(12000)});
+  if(!response.ok)throw new Error('HTTP');
+  mergeSource(source,normalize(await response.json(),source));
+ }catch(e){mergeSource(source,[],true);}
+ draw();
+}
 async function load(){
  if(busy)return;busy=true;reload.disabled=true;
- try{const response=await fetch(API+'?t='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(12000)});if(!response.ok)throw new Error('HTTP');latest=normalize(await response.json());networkFailed=false;draw();}
- catch(e){networkFailed=true;if(latest)draw();else{cards.innerHTML='<div class="empty">暂时无法读取服务器状态，页面会自动重试。</div>';}}
+ try{await Promise.allSettled([loadSource('vmiss',VMISS_API),loadSource('worker',WORKER_API)]);}
  finally{busy=false;reload.disabled=false;next=30;}
 }
+draw();
 reload.addEventListener('click',load);load();setInterval(()=>{if(!busy&&--next<=0)load();refresh.textContent=busy?'正在更新…':next+' 秒后自动刷新';draw();},1000);
 </script></body></html>
