@@ -1,0 +1,17 @@
+[Unit]
+Description=Export public VMISS stock status
+
+[Service]
+Type=oneshot
+User=vmiss-monitor
+Group=vmiss-monitor
+ExecStart=/opt/vmiss-stock-monitor/.venv/bin/python /opt/vmiss-public-status/export_status.py
+StateDirectory=vmiss-public-status
+StateDirectoryMode=0755
+UMask=0022
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/vmiss-public-status
+MemoryMax=48M
