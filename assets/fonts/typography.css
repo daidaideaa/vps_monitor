@@ -1,0 +1,51 @@
+/* Inter 4.1 + Noto Sans SC: variable fonts served with the site. */
+@font-face {
+  font-family: "Monitor Inter";
+  src: url("./inter-latin.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Monitor Noto SC";
+  src: url("./noto-sans-sc-ui.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+:root { --ui-font: "Monitor Inter", "Monitor Noto SC", "PingFang SC", "Microsoft YaHei", sans-serif; }
+body {
+  font-family: var(--ui-font);
+  font-size: 15px;
+  line-height: 1.65;
+  font-weight: 400;
+  font-optical-sizing: auto;
+  font-synthesis: none;
+}
+button, input, select, textarea { font-family: inherit; }
+h1 { font-size: 27px; line-height: 1.4; font-weight: 550; letter-spacing: -.025em; }
+.brand { font-size: 16px; font-weight: 550; }
+.provider { font-size: 20px; font-weight: 550; letter-spacing: -.035em; }
+.subtitle, .product, .plans .product { font-size: 14px; }
+.product, .plans .product { font-weight: 450; letter-spacing: -.01em; }
+.breadcrumb, .location, .repo-link, button, .overview, .plan-status,
+.label, .plans .label, .buy-link { font-size: 13px; }
+.value { font-size: 14px; font-weight: 400; letter-spacing: -.015em; font-variant-numeric: tabular-nums; }
+.provider-host, .refresh, .source, .plan-details, .monitor-info, footer,
+.overview .counts { font-size: 12px; }
+.overview .main-count { font-weight: 500; }
+.plan-note { font-size: 13px; }
+.facts { gap: 12px; }
+.label, .source, .provider-host, .refresh { color: #67676e; }
+@media (max-width:680px) {
+  h1 { font-size: 24px; }
+  .provider { font-size: 19px; }
+  .product { font-size: 13px; }
+  .plans .product { font-size: 14px; }
+  .value { font-size: 13px; }
+  .overview .main-count { font-size: 13px; }
+  .overview .counts, .refresh, .provider-host, .breadcrumb, .monitor-info, footer { font-size: 12px; }
+  .toolbar { flex-wrap: wrap; }
+  .actions { flex-direction: row; align-items: center; justify-content: space-between; width: 100%; margin-top: 5px; }
+  .plan-top { flex-wrap: wrap; }
+}
