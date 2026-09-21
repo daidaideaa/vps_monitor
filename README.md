@@ -18,7 +18,7 @@ GitHub Pages 每 30 秒独立读取两个公开 API，合并展示。VMISS API �
 - Cron：`*/3 * * * *`（UTC，约每 3 分钟）。
 
 <!-- worker-api:start -->
-Worker API：[status.json](https://vps-monitor.daidaidefish.workers.dev/status.json)。2026-09-21 已验证正式接口返回 HTTP 200、两家产品的 JSON，以及 CORS / no-store / nosniff 响应头；验证时状态为“等待首次定时检查”，Cron 执行结果仍待确认。
+Worker API：[status.json](https://vps-monitor.daidaidefish.workers.dev/status.json)。2026-09-21 已验证正式接口返回 HTTP 200、两家产品的 JSON，以及 CORS / no-store / nosniff 响应头；已确认 Cron 在北京时间 12:31:12 产生检查记录并完成 KV 写入；两家本轮均为 unknown，不能据此判断有货或无货。
 <!-- worker-api:end -->
 
 `index.html` 已固定使用上述正式 API。GitHub Pages 从 main 发布，无需构建；Worker 的代码和定时配置位于 `worker/`。

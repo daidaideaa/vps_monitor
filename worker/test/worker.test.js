@@ -92,3 +92,15 @@ test('KV 故障不覆盖旧状态，公开 API 不泄露堆栈或敏感字段', 
   assert.equal(publicData.products[0].stock, null);
   assert.ok(!JSON.stringify(publicData).includes('secret'));
 });
+
+test('公开 unknown 原因使用固定分类，区分 HTTP 拒绝与解析失败', async () => {
+  const storage = kv();
+  const env = { VPS_MONITOR_KV: storage };
+  await runScheduled(env, async url => url.includes('zgovps') ?
+    new Response('private challenge page', { status: 403 }) : html('<div>页面结构变化</div>'), () => stamp);
+  const data = await (await worker.fetch(new Request('https://unit.test/status.json'), env)).json();
+  assert.equal(data.products[0].explanation, '商家 HTTP 403，拒绝访问');
+  assert.match(data.products[1].explanation, /未能可靠识别/);
+  assert.ok(data.products.every(p => p.status === 'unknown' && p.stock === null));
+  assert.ok(!JSON.stringify(data).includes('private challenge page'));
+});
