@@ -17,8 +17,8 @@
 <footer>独立库存监控页面 · 非 VMISS / ZgoCloud / RFCHOST 官方服务 · GitHub Pages</footer></div>
 <script>
 const VMISS_API='https://vmiss-status.96-126-179-210.sslip.io/status.json';
-// 部署脚本验证真实 API 后自动回填；未部署时不请求虚构域名。
-const WORKER_API=null;
+// Cloudflare 正式接口；页面读取不会触发商家检查。
+const WORKER_API="https://vps-monitor.daidaidefish.workers.dev/status.json";
 const cards=document.getElementById('cards'),reload=document.getElementById('reload'),refresh=document.getElementById('refresh');
 const allowedHosts=new Set(['app.vmiss.com','clients.zgovps.com','my.rfchost.com']);
 const words={available:'有货',unavailable:'无货',unknown:'尚未确认'};

@@ -18,10 +18,10 @@ GitHub Pages 每 30 秒独立读取两个公开 API，合并展示。VMISS API �
 - Cron：`*/3 * * * *`（UTC，约每 3 分钟）。
 
 <!-- worker-api:start -->
-已创建的 Production 地址：[vps-monitor.daidaidefish.workers.dev](https://vps-monitor.daidaidefish.workers.dev)。库存接口部署仍待验证，尚未切换 GitHub Pages；当前执行环境访问 `/status.json` 返回 HTTP 403，用户浏览器下载为空文件。
+Worker API：[status.json](https://vps-monitor.daidaidefish.workers.dev/status.json)。2026-09-21 已验证正式接口返回 HTTP 200、两家产品的 JSON，以及 CORS / no-store / nosniff 响应头；验证时状态为“等待首次定时检查”，Cron 执行结果仍待确认。
 <!-- worker-api:end -->
 
-未部署时 `WORKER_API=null`，两张卡明确显示“库存检查尚未启用”，不会访问虚构的 workers.dev 域名。**在部署验证完成并回填地址之前，不应将此次前端切换合入生产分支。**
+`index.html` 已回填上述正式 API 地址。前端变更目前仍在 `codex/cloudflare-stock-monitor` 分支，尚未合入 main；首次 Cron 和 KV 写入验证完成后再切换 GitHub Pages。
 
 ## 文件职责
 
