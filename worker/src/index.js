@@ -33,7 +33,12 @@ const unknownResult = explanation => ({ status: 'unknown', stock: null, explanat
 
 function initialProduct(target, explanation = '等待首次定时检查') {
   return { ...target, status: 'unknown', last_confirmed: 'unknown', last_checked: null,
-    unknown_count: 0, stock: null, explanation, check_interval_seconds: 180 };
+    unknown_count: 0, stock: null, explanation, check_interval_seconds: 180,
+    unavailable_since: null, last_available_at: null };
+}
+
+function historyTime(value, checked) {
+  return typeof value === 'string' && Number.isFinite(Date.parse(value)) && Date.parse(value) <= Date.parse(checked) ? value : null;
 }
 
 function publicSnapshot(stored, explanation) {
@@ -48,6 +53,8 @@ function publicSnapshot(stored, explanation) {
       return { ...initialProduct(target), status,
         last_confirmed: STATES.has(old.last_confirmed) ? old.last_confirmed : 'unknown',
         last_checked: typeof old.last_checked === 'string' && Number.isFinite(Date.parse(old.last_checked)) ? old.last_checked : null,
+        unavailable_since: status === 'unavailable' ? historyTime(old.unavailable_since, old.last_checked) : null,
+        last_available_at: historyTime(old.last_available_at, old.last_checked) || (status === 'available' ? historyTime(old.last_checked, old.last_checked) : null),
         unknown_count: count,
         stock: status === 'unavailable' ? 0 : status === 'available' && Number.isSafeInteger(old.stock) && old.stock > 0 ? old.stock : null,
         explanation: status === 'available' ? '已确认目标套餐有库存' : status === 'unavailable' ? '已确认目标套餐无库存' :
@@ -107,7 +114,11 @@ export async function runScheduled(env, fetcher = fetch, now = () => new Date().
     const result = results[index];
     const current = result.status === 'fulfilled' ? result.value : { status: 'unknown', stock: null };
     const unknown = current.status === 'unknown';
+    const gap = Date.parse(published_at) - Date.parse(old.last_checked);
+    const continuous = old.status === 'unavailable' && gap >= 0 && gap <= 3 * 180 * 1000;
     return { ...target, ...current, last_confirmed: unknown ? old.last_confirmed : current.status,
+      last_available_at: current.status === 'available' ? published_at : old.last_available_at,
+      unavailable_since: current.status === 'unavailable' ? (continuous && old.unavailable_since || published_at) : null,
       last_checked: published_at, unknown_count: unknown ? Math.min(old.unknown_count + 1, Number.MAX_SAFE_INTEGER) : 0,
       explanation: unknown ? current.explanation || '商家请求失败或发生重定向' :
         current.status === 'available' ? '已确认目标套餐有库存' : '已确认目标套餐无库存',

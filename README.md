@@ -129,6 +129,16 @@ npx wrangler tail --format pretty
 
 Worker 快照的 schema 为 v1，包含 `products` 与 `published_at`；每个产品保存 `id/provider/product_name/product_url/status/last_confirmed/last_checked/unknown_count/stock/explanation/check_interval_seconds`。KV 可能存在短暂传播延迟；UI 根据检查时间判断有效性。
 
+## 库存时间记录
+
+三张卡显示“连续无货 · 观测时长”和“上次确认有货 · 北京时间”。API 新增 `unavailable_since`、`last_available_at`，缺少历史时为 null，页面显示“尚无记录”。
+
+- `last_available_at`：最近一次可靠确认有货的检查时间，后续无货或 unknown 不覆盖它。
+- `unavailable_since`：本轮连续无货观测的起点；首次无货从该次检查开始，有货、unknown 或超过三个检查间隔的断档会中断累计。
+- 页面只在当前记录为有效的 unavailable 时显示时长；连接异常、unknown 或 stale 时不继续展示为连续无货。记录不代表两次轮询之间从未短暂补货，也无法还原启用本功能之前的真实售罄时间。
+
+Worker 将时间字段保存在原有合并 KV 快照中，仍每轮只写一次。VMISS 导出器读取上次公开快照保存历史，重复导出同一检查不会重置计时，不修改 Playwright 状态文件。**VMISS 需要将新版 `server/export_status.py` 同步到香港 VPS 后才会输出这些字段**；旧 API 仍正常显示库存，历史栏显示“尚无记录”。
+
 ## 香港 VPS 迁移收尾
 
 **先确认 Worker 两家均已产生 scheduled 记录、Pages 已回填真实地址，再停用旧两家任务。** 删除仓库文件不会自动停止服务器上已经运行的 systemd 服务。

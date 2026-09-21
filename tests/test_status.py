@@ -48,6 +48,26 @@ class SnapshotTest(unittest.TestCase):
         self.assertNotIn('ZgoCloud', str(result))
         self.assertNotIn('RFCHOST', str(result))
 
+    def test_persistent_history_uses_check_time_and_handles_gaps(self):
+        def checked(at, status='unavailable', errors=0, previous=None):
+            state = self.state(status, errors)
+            state['last_checked'] = '2026-09-21T' + at + '+08:00'
+            return snapshot(state, previous=previous)
+        first = checked('08:00:00')
+        self.assertIsNone(first['last_available_at'])
+        repeated = checked('08:00:00', previous=first)
+        second = checked('08:03:00', previous=repeated)
+        self.assertEqual(second['unavailable_since'], first['last_checked'])
+        available = checked('08:06:00', 'available', previous=second)
+        self.assertIsNone(available['unavailable_since'])
+        unknown = checked('08:09:00', 'available', 1, previous=available)
+        self.assertEqual(unknown['last_available_at'], available['last_checked'])
+        resumed = checked('08:12:00', previous=unknown)
+        self.assertEqual(resumed['unavailable_since'], resumed['last_checked'])
+        gap = checked('08:22:00', previous=resumed)
+        self.assertEqual(gap['unavailable_since'], gap['last_checked'])
+        self.assertEqual(gap['last_available_at'], available['last_checked'])
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -91,3 +91,16 @@ test('首次定时检查前显示 unknown 等待，不误显示过期', () => {
   assert.equal(p.states()[1], 'unknown');
   assert.ok(p.text().includes('等待首次定时检查'));
 });
+
+test('库存历史显示天时分及北京时间，未知或过期不继续累计无货', () => {
+  const p = page();
+  p.run("Date.now=()=>Date.parse('2026-09-23T04:05:00Z')");
+  const item = {unavailable_since:'2026-09-21T02:00:00Z',last_checked:'2026-09-23T04:03:00Z',last_available_at:'2026-09-21T01:57:00Z'};
+  const history = state => p.run(`inventoryHistory(${JSON.stringify(item)}, '${state}')`);
+  assert.equal(history('unavailable')[0][1], '2 天 2 小时 5 分钟');
+  assert.match(history('unavailable')[1][1], /2026.*09.*21.*09:57/);
+  assert.equal(history('unknown')[0][1], '暂时无法确认');
+  assert.equal(history('stale')[0][1], '检查数据已过期');
+  assert.equal(history('available')[0][1], '当前有货');
+  assert.equal(p.run("inventoryHistory({}, 'unavailable')[0][1]"), '尚无记录');
+});

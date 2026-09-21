@@ -55,6 +55,16 @@ function productState(item){
  return {state,checked,seconds,interval};
 }
 function safeLink(value){try{const url=new URL(value);return url.protocol==='https:'&&allowedHosts.has(url.hostname)?url.href:'#';}catch(e){return '#';}}
+function inventoryHistory(item,state){
+ const since=Date.parse(item.unavailable_since),checked=Date.parse(item.last_checked),last=Date.parse(item.last_available_at);
+ let duration=({available:'当前有货',unknown:'暂时无法确认',stale:'检查数据已过期',offline:'连接异常'})[state]||'尚无记录';
+ if(state==='unavailable'&&Number.isFinite(since)&&since<=checked&&checked<=Date.now()+120000){
+  const minutes=Math.floor(Math.max(0,Date.now()-since)/60000),days=Math.floor(minutes/1440),hours=Math.floor(minutes%1440/60);
+  duration=minutes<1?'不足 1 分钟':(days?days+' 天 ':'')+(hours?hours+' 小时 ':'')+(minutes%60?minutes%60+' 分钟':'');
+ }
+ const lastAvailable=Number.isFinite(last)&&last<=Date.now()+120000?new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).format(last):'尚无记录';
+ return [['连续无货 · 观测时长',duration.trim()],['上次确认有货 · 北京时间',lastAvailable]];
+}
 function cardFor(item){
  const meta=productState(item),state=meta.state;
  const panel=document.createElement('article');panel.className='panel';panel.dataset.state=state;
@@ -69,6 +79,7 @@ function cardFor(item){
  const checked=Number.isFinite(meta.checked)?new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(meta.checked):'尚无记录';
  const age=Number.isFinite(meta.seconds)?(meta.seconds<60?'刚刚检查':Math.floor(Math.max(0,meta.seconds)/60)+' 分钟前'):'';
  const values=[['最近检查 · 北京时间',checked+(age?' · '+age:'')],['检查频率',meta.interval>=60?'约 '+Math.round(meta.interval/60)+' 分钟':meta.interval+' 秒'],['最近确认库存',words[item.last_confirmed]||'尚未确认']];
+ values.push(...inventoryHistory(item,state));
  if(['available','unavailable'].includes(state)&&Number.isInteger(item.stock)&&item.stock>=0)values.push(['商家库存数字',String(item.stock)]);
  values.forEach(([label,value])=>{const fact=document.createElement('div');fact.className='fact';const l=document.createElement('div');l.className='label';l.textContent=label;const v=document.createElement('div');v.className='value';v.textContent=value;fact.append(l,v);facts.append(fact)});
  const action=document.createElement('div');action.className='card-action';const link=document.createElement('a');link.className='button primary';link.href=safeLink(item.product_url);link.target='_blank';link.rel='noopener noreferrer';link.textContent='查看官方套餐 ↗';action.append(link);panel.append(main,facts,action);return panel;

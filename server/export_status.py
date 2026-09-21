@@ -1,6 +1,7 @@
 """Publish only allowlisted, non-secret stock monitor fields."""
 import json
 import os
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -62,7 +63,38 @@ def _public_product(state, provider, product_id, interval=180):
     }
 
 
-def snapshot(state, interval=180):
+def _timestamp(value):
+    try:
+        parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        return parsed.timestamp() if parsed.tzinfo else None
+    except (AttributeError, TypeError, ValueError):
+        return None
+
+
+def _inventory_history(public, previous):
+    # 历史写在公开快照中，不修改 Playwright 的状态文件。
+    previous = previous or {}
+    if previous.get('product_name') != public['product_name']:
+        previous = {}
+    checked = _timestamp(public['last_checked'])
+    old_checked = _timestamp(previous.get('last_checked'))
+    last_available = previous.get('last_available_at')
+    if _timestamp(last_available) is None:
+        last_available = previous.get('last_checked') if previous.get('status') == 'available' and old_checked is not None else None
+    since = None
+    if checked is not None and (old_checked is None or checked >= old_checked):
+        if public['status'] == 'available':
+            last_available = public['last_checked']
+        elif public['status'] == 'unavailable':
+            old_since = previous.get('unavailable_since')
+            continuous = (previous.get('status') == 'unavailable' and old_checked is not None
+                          and checked - old_checked <= 3 * public['check_interval_seconds']
+                          and _timestamp(old_since) is not None and _timestamp(old_since) <= checked)
+            since = old_since if continuous else public['last_checked']
+    return {'last_available_at': last_available, 'unavailable_since': since}
+
+
+def snapshot(state, interval=180, previous=None):
     """只导出 VMISS，保持原有 schema v1 和未知状态语义。"""
     target = state.get('target') or {}
     merged = dict(state)
@@ -70,6 +102,7 @@ def snapshot(state, interval=180):
     merged['product_url'] = target.get('product_url', '')
     merged['status'] = 'unknown' if int(state.get('unknown_count', 0) or 0) else state.get('last_confirmed', 'unknown')
     public = _public_product(merged, 'VMISS', 'vmiss-jp-tky-tri-basic', interval)
+    public.update(_inventory_history(public, previous))
     return {'schema_version': 1, **{k: v for k, v in public.items() if k not in {'id', 'provider'}}}
 
 
@@ -84,7 +117,7 @@ def main():
     vmiss_state = _read_json(VMISS_MONITOR / 'state.json')
     config = dotenv_values(VMISS_MONITOR / '.env')
     interval = max(30, int(config.get('CHECK_INTERVAL_SECONDS', 180)))
-    data = snapshot(vmiss_state or {}, interval)
+    data = snapshot(vmiss_state or {}, interval, previous=_read_json(OUTPUT))
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     temporary = OUTPUT.with_suffix('.tmp')
     temporary.write_text(json.dumps(data, ensure_ascii=False) + '\n', encoding='utf-8')

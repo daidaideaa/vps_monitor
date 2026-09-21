@@ -104,3 +104,29 @@ test('公开 unknown 原因使用固定分类，区分 HTTP 拒绝与解析失�
   assert.ok(data.products.every(p => p.status === 'unknown' && p.stock === null));
   assert.ok(!JSON.stringify(data).includes('private challenge page'));
 });
+
+test('库存时间持久化：无货连续累计，有货更新，异常和检查断档中断累计', async () => {
+  const storage = kv(), env = { VPS_MONITOR_KV: storage };
+  const check = (at, status) => runScheduled(env, async url => status === 'unknown' ?
+    new Response('', { status: 403 }) : html(url.includes('zgovps') ?
+      zgo.replace('Continue', status === 'available' ? 'Continue' : 'Out of stock!') :
+      rfc.replace('0 Available', status === 'available' ? '2 Available' : '0 Available')), () => at);
+  const start = '2026-09-21T12:00:00.000Z';
+  const first = await check(start, 'unavailable');
+  assert.equal(first.products[0].last_available_at, null);
+  const second = await check('2026-09-21T12:03:00.000Z', 'unavailable');
+  assert.equal(second.products[0].unavailable_since, start);
+  const available = await check('2026-09-21T12:06:00.000Z', 'available');
+  assert.equal(available.products[0].unavailable_since, null);
+  const unavailable = await check('2026-09-21T12:09:00.000Z', 'unavailable');
+  assert.equal(unavailable.products[0].last_available_at, available.published_at);
+  await check('2026-09-21T12:12:00.000Z', 'unknown');
+  const resumed = await check('2026-09-21T12:15:00.000Z', 'unavailable');
+  assert.equal(resumed.products[0].unavailable_since, resumed.published_at);
+  const gap = await check('2026-09-21T12:25:00.000Z', 'unavailable');
+  assert.equal(gap.products[0].unavailable_since, gap.published_at);
+  const response = await worker.fetch(new Request('https://unit.test/status.json'), env);
+  const publicState = await response.json();
+  assert.equal(publicState.products[0].last_available_at, available.published_at);
+  assert.equal(publicState.products[0].unavailable_since, gap.published_at);
+});
