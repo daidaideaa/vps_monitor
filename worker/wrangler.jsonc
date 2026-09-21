@@ -6,6 +6,6 @@
   "workers_dev": true,
   "preview_urls": false,
   "send_metrics": false,
-  "triggers": { "crons": ["*/3 * * * *"] },
+  "triggers": { "crons": [] },
   "kv_namespaces": [{ "binding": "VPS_MONITOR_KV" }]
 }

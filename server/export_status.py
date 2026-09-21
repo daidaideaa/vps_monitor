@@ -1,23 +1,25 @@
 """Publish only allowlisted, non-secret stock monitor fields."""
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
 
 from dotenv import dotenv_values
+from stock_targets import INTERVAL, TARGETS
 
 VMISS_MONITOR = Path('/opt/vmiss-stock-monitor')
 OUTPUT = Path('/var/lib/vmiss-public-status/status.json')
+VPS_STATE = Path('/var/lib/vps-stock-monitor/http-status.json')
 STATES = {'available', 'unavailable', 'unknown'}
-ALLOWED_HOSTS = {'VMISS': 'app.vmiss.com'}
-FALLBACK_URLS = {'VMISS': 'https://app.vmiss.com/'}
+ALLOWED_HOSTS = {'VMISS': 'app.vmiss.com', 'ZgoCloud': 'clients.zgovps.com', 'RFCHOST': 'my.rfchost.com'}
+FALLBACK_URLS = {'VMISS': 'https://app.vmiss.com/', **{t['provider']: t['product_url'] for t in TARGETS}}
 
 
 def _safe_url(provider, value):
     url = str(value or '')
     parsed = urlsplit(url)
-    if parsed.scheme == 'https' and parsed.hostname == ALLOWED_HOSTS.get(provider):
+    if parsed.scheme == 'https' and parsed.netloc == ALLOWED_HOSTS.get(provider):
         return url
     return FALLBACK_URLS[provider]
 
@@ -46,7 +48,11 @@ def _public_product(state, provider, product_id, interval=180):
     if errors:
         current = 'unknown'
     stock = state.get('stock')
-    if not isinstance(stock, int) or stock < 0 or current == 'unknown':
+    if type(stock) is not int or stock < 0 or current == 'unknown':
+        stock = None
+    if current == 'unavailable':
+        stock = 0
+    elif current == 'available' and stock == 0:
         stock = None
     return {
         'id': product_id,
@@ -60,6 +66,7 @@ def _public_product(state, provider, product_id, interval=180):
         'stock': stock,
         'explanation': _explanation(errors, state.get('last_unknown_reason'), confirmed),
         'check_interval_seconds': max(30, int(interval)),
+        'query_location': 'hong-kong-vps',
     }
 
 
@@ -74,7 +81,8 @@ def _timestamp(value):
 def _inventory_history(public, previous):
     # 历史写在公开快照中，不修改 Playwright 的状态文件。
     previous = previous or {}
-    if previous.get('product_name') != public['product_name']:
+    if (previous.get('product_name') != public['product_name']
+            or previous.get('product_url') != public['product_url']):
         previous = {}
     checked = _timestamp(public['last_checked'])
     old_checked = _timestamp(previous.get('last_checked'))
@@ -108,16 +116,39 @@ def snapshot(state, interval=180, previous=None):
 
 def _read_json(path):
     try:
-        return json.loads(path.read_text(encoding='utf-8'))
+        value = json.loads(path.read_text(encoding='utf-8'))
+        return value if isinstance(value, dict) else None
     except (FileNotFoundError, json.JSONDecodeError, OSError):
         return None
+
+
+def combined_snapshot(vmiss_state, other_state=None, interval=180, previous=None):
+    """Only VPS checks are exported. Missing results stay unknown, never fabricated."""
+    previous = previous or {}
+    old_products = previous.get('products') if isinstance(previous.get('products'), list) else []
+    previous_vmiss = next((p for p in old_products if isinstance(p, dict) and p.get('provider') == 'VMISS'), None)
+    if previous_vmiss is None and previous.get('schema_version') == 1 and 'products' not in previous:
+        previous_vmiss = previous
+    vmiss = snapshot(vmiss_state, interval, previous_vmiss)
+    vmiss.pop('schema_version')
+    products = [{'id': 'vmiss-jp-tky-tri-basic', 'provider': 'VMISS', **vmiss}]
+    others = (other_state or {}).get('products', [])
+    for target in TARGETS:
+        matches = [p for p in others if isinstance(p, dict) and p.get('id') == target['id']]
+        state = matches[0] if len(matches) == 1 else {}
+        public = _public_product({**state, **target}, target['provider'], target['id'], INTERVAL)
+        # The checker persists history even if the exporter skips intermediate checks.
+        public.update(_inventory_history(public, {**state, **target}))
+        products.append(public)
+    return {'schema_version': 2, 'query_location': 'hong-kong-vps',
+            'products': products, 'published_at': datetime.now(timezone.utc).isoformat()}
 
 
 def main():
     vmiss_state = _read_json(VMISS_MONITOR / 'state.json')
     config = dotenv_values(VMISS_MONITOR / '.env')
     interval = max(30, int(config.get('CHECK_INTERVAL_SECONDS', 180)))
-    data = snapshot(vmiss_state or {}, interval, previous=_read_json(OUTPUT))
+    data = combined_snapshot(vmiss_state or {}, _read_json(VPS_STATE), interval, previous=_read_json(OUTPUT))
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     temporary = OUTPUT.with_suffix('.tmp')
     temporary.write_text(json.dumps(data, ensure_ascii=False) + '\n', encoding='utf-8')
