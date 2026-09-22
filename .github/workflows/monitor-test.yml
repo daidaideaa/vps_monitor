@@ -1,0 +1,82 @@
+name: VMISS Monitor Test
+
+on:
+  push:
+    paths:
+      - 'vmiss-stock-monitor/**'
+      - '.github/workflows/monitor-test.yml'
+  pull_request:
+    paths:
+      - 'vmiss-stock-monitor/**'
+      - '.github/workflows/monitor-test.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PRODUCT_NAME: JP.TKY.TRI.Basic
+  PRODUCT_URL: https://app.vmiss.com/store/jp-tokyo-tri?language=chinese
+  SMTP_HOST: smtp.gmail.com
+  SMTP_PORT: '587'
+  PYTHONUNBUFFERED: '1'
+
+defaults:
+  run:
+    working-directory: vmiss-stock-monitor
+
+jobs:
+  unit-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: vmiss-stock-monitor/requirements.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Install Chromium
+        run: python -m playwright install --with-deps chromium
+      - name: Parser, state and SMTP unit tests (no real email)
+        run: python -m pytest -q
+      - name: Check live VMISS once (no email or state changes)
+        shell: bash
+        run: |
+          result=0
+          python monitor.py --once || result=$?
+          if [ "$result" -eq 2 ]; then
+            echo '::warning::VMISS returned unknown; live inventory access is NOT verified. Check the public evidence above.'
+            echo 'VMISS live check: **unknown**. Offline tests passing does not confirm live page access.' >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$result" -ne 0 ]; then
+            exit "$result"
+          else
+            echo 'VMISS live check: confirmed stock status; see public evidence above.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  integration-email-test:
+    if: github.event_name == 'workflow_dispatch'
+    needs: unit-test
+    environment: vmiss-test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Send real SMTP test email
+        env:
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          SMTP_FROM: ${{ secrets.SMTP_FROM }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+        run: python monitor.py --test-email

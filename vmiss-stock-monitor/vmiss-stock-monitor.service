@@ -1,0 +1,20 @@
+[Unit]
+Description=VMISS Stock Monitor (standalone)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=vmiss-monitor
+WorkingDirectory=/opt/vmiss-stock-monitor
+ExecStart=/opt/vmiss-stock-monitor/.venv/bin/python /opt/vmiss-stock-monitor/monitor.py
+Restart=always
+RestartSec=10
+Environment=PYTHONUNBUFFERED=1
+Environment=PLAYWRIGHT_BROWSERS_PATH=/opt/vmiss-stock-monitor/.browsers
+UMask=0077
+TimeoutStopSec=20
+KillMode=control-group
+
+[Install]
+WantedBy=multi-user.target

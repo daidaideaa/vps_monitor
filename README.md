@@ -1,5 +1,7 @@
 # 东京 VPS 库存观察
 
+独立的 Python VMISS 邮件监控见 [vmiss-stock-monitor/](vmiss-stock-monitor/README.md)，支持 Debian 12、systemd 和 GitHub 手动 SMTP 测试。它单独部署，不直接替换下述现有日本端多商户服务。
+
 [库存页面](https://daidaideaa.github.io/vps_monitor/)由 **JP-HOME-HY2（日本家宽 VPS）**独立检查四家商户的五个套餐并发送邮件。Windows 无需常开，运行链路不再依赖香港 VPS。
 
 | 套餐 | 检查方式 |
