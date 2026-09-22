@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+state.json
+state.json.*
+screenshots/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.monitor.lock
