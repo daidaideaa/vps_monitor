@@ -141,7 +141,7 @@ python monitor.py --debug
 
 普通 push / PR（本项目相关路径变更）只安装 Python、依赖与 Chromium，执行 `pytest` 和 `--once`，**不关联 Environment、不注入 SMTP Secrets、不发送邮件**。
 
-手动测试：**Actions → VMISS Monitor Test → Run workflow → 选择分支 → Run workflow**。先执行同样的 pytest 与真实单次检查，随后 `integration-email-test` 使用 `environment: vmiss-test` 和上述四个 Secrets 执行 `--test-email`。它只允许 `workflow_dispatch`。没有上传日志、截图或配置的 artifact。
+首次使用须先让本 workflow 进入仓库默认分支，GitHub 才显示手动运行入口。手动测试：**Actions → VMISS Monitor Test → Run workflow → 选择分支 → Run workflow**。先执行同样的 pytest 与真实单次检查，随后 `integration-email-test` 使用 `environment: vmiss-test` 和上述四个 Secrets 执行 `--test-email`。它只允许 `workflow_dispatch`。没有上传日志、截图或配置的 artifact。
 
 VMISS 实时检查若返回 unknown，workflow 会明确显示 warning 和 Job summary，保留真实状态，不把 unknown 写成“库存检查成功”；离线测试通过后仍允许手动 SMTP 测试，以便独立诊断邮件配置。CI 绿色只说明离线测试和命令执行正常，不证明商家在该出口可访问。
 

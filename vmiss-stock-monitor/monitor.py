@@ -159,7 +159,7 @@ EXTRACT = r"""(product) => {
     const norm = s => (s || '').replace(/\s+/g, ' ').trim();
     const visible = e => !!(e.getClientRects().length) &&
         getComputedStyle(e).visibility !== 'hidden' && getComputedStyle(e).display !== 'none';
-    const cardSelector = '.product, .product-card, .pricing-card, .package, .package-card, [data-product-id], [id^="product"]';
+    const cardSelector = '.product, .product-card, .pricing-card, .package, .package-card, [data-product-id]';
     const headingSelector = 'h1,h2,h3,h4,h5,h6,.product-name,.product-title,.package-name,[data-product-name]';
     const candidates = [...document.querySelectorAll(cardSelector)].filter(visible).filter(card => {
         const headings = [...card.querySelectorAll(headingSelector)].filter(visible);
@@ -168,7 +168,7 @@ EXTRACT = r"""(product) => {
         // 嵌套 h3/span 同名可以；其它标题可能是另一套餐，保守拒绝。
         return matches.length > 0 && otherTitles.length === 0;
     });
-    // WHMCS 的 #product1.product 是卡片；排除只因前缀命中的 #products 列表。
+    // WHMCS 的 #product1.product 是卡片；#products 列表不属于候选。
     const cards = candidates.filter(card => !candidates.some(other => other !== card && card.contains(other)));
     const cleanText = card => {
         const walker = document.createTreeWalker(card, NodeFilter.SHOW_TEXT);
@@ -229,7 +229,7 @@ def check_stock(cfg, screenshot_unknown=False):
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(
-                headless=True, timeout=cfg.timeout_ms,
+                channel="chromium", headless=True, timeout=cfg.timeout_ms,
                 env={k: v for k, v in os.environ.items() if k not in SECRET_KEYS},
             )
             try:

@@ -26,7 +26,7 @@ ORDER = '<a href="/cart.php?a=add&pid=1">Order Now</a>'
 @pytest.fixture(scope="module")
 def browser():
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(channel="chromium", headless=True)
         yield browser
         browser.close()
 
@@ -74,6 +74,7 @@ def page(browser):
     (card("", name=PRODUCT + "Plus", button=ORDER), "unknown"),
     (f'<h3>{PRODUCT}</h3><div>3 Available</div>', "unknown"),
     (f'<div id="products"><h3>{PRODUCT}</h3><div class="product"><h3>Pro</h3>{ORDER}</div></div>', "unknown"),
+    (f'<div id="products"><h3>{PRODUCT}</h3><div>JP.TKY.TRI.Pro 3 Available</div></div>', "unknown"),
     (card("") + card("5 Available", "JP.TKY.TRI.Pro", ORDER), "unknown"),
 ])
 def test_parser_in_real_dom(page, html, status):
