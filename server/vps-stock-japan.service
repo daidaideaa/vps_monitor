@@ -11,6 +11,7 @@ WorkingDirectory=/opt/vmiss-public-status
 ExecStart=/opt/vmiss-stock-monitor/.venv/bin/python /opt/vmiss-public-status/run_japan_cycle.py
 Environment=PLAYWRIGHT_BROWSERS_PATH=/opt/vmiss-stock-monitor/.browsers
 Environment=QUERY_LOCATION=japan-home-vps
+Environment=VMISS_MONITOR_ROOT=/opt/vmiss-stock-monitor
 Environment=PYTHONUNBUFFERED=1
 Environment=TZ=Asia/Shanghai
 StateDirectory=vps-stock-monitor vmiss-public-status

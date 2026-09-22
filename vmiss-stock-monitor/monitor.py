@@ -1,7 +1,6 @@
 """VMISS 单套餐库存监控；--once 无邮件、无状态写入。"""
 
 import argparse
-import fcntl
 import json
 import logging
 import os
@@ -283,6 +282,14 @@ def load_state(path, cfg):
         return fresh_state(cfg)
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(data, dict) and data.get('version') == 1 and 'target' in data and 'last_status' not in data:
+            # Convert in memory; original file is backed up only on the first write.
+            target = data['target']
+            data = {**data, 'product_name': target.get('product_name'), 'product_url': target.get('product_url'),
+                    'last_status': data.get('last_confirmed'), 'consecutive_errors': data.get('unknown_count'),
+                    'alerted_for_current_stock': data.get('stock_notified'), 'error_alert_sent': data.get('error_notified'),
+                    'last_check': data.get('last_checked'), 'last_evidence': data.get('last_unknown_reason', ''),
+                    '_legacy_migration': True}
         expected = fresh_state(cfg)
         if not isinstance(data, dict) or not expected.keys() <= data.keys():
             raise ValueError
@@ -295,13 +302,19 @@ def load_state(path, cfg):
         if (data["product_name"], data["product_url"]) != (cfg.product_name, cfg.product_url):
             LOG.warning("Product configuration changed; starting a new stock cycle")
             return expected
-        return {key: data[key] for key in expected}
+        return {**data, **{key: data[key] for key in expected}}
     except (OSError, ValueError, TypeError):
         raise ValueError("State file unreadable or invalid; repair it before restarting") from None
 
 
 def save_state(path, state):
     # 先 fsync 临时文件，再原子替换；失败时不继续发送邮件。
+    if state.pop('_legacy_migration', False):
+        backup = path.with_name(path.name + '.before-repo-split')
+        if path.exists() and not backup.exists():
+            with backup.open('xb') as stream:
+                stream.write(path.read_bytes())
+            os.chmod(backup, 0o600)
     temp = None
     try:
         with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent,
@@ -312,11 +325,12 @@ def save_state(path, state):
             f.flush()
             os.fsync(f.fileno())
         os.replace(temp, path)
-        directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
-        try:
-            os.fsync(directory)
-        finally:
-            os.close(directory)
+        if os.name == "posix":
+            directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
     finally:
         if temp is not None:
             temp.unlink(missing_ok=True)
@@ -365,6 +379,9 @@ def process_result(cfg, state, result, path, sender=send_email):
         updated.update(last_status=result.status, consecutive_errors=0, error_alert_sent=False)
         if result.status == "unavailable":
             updated["alerted_for_current_stock"] = False
+            updated.pop("baseline_required", None)
+        elif updated.pop("baseline_required", False):
+            updated["alerted_for_current_stock"] = True
         elif not updated["alerted_for_current_stock"]:
             alert = "stock"
     save_state(path, updated)
@@ -389,12 +406,29 @@ def process_result(cfg, state, result, path, sender=send_email):
 
 @contextmanager
 def single_instance():
-    with (ROOT / ".monitor.lock").open("a") as lock:
+    """Protect the persistent profile and state from concurrent CLI/service runs."""
+    with (ROOT / ".monitor.lock").open("a+b") as handle:
         try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            raise ValueError("Another monitor instance is running") from None
-        yield
+            if os.name == "posix":
+                import fcntl
+                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            else:
+                import msvcrt
+                handle.seek(0)
+                if not handle.read(1):
+                    handle.write(b"0"); handle.flush()
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+        except OSError:
+            raise ValueError("Another monitor/--once is running; stop the service before --once") from None
+        try:
+            yield
+        finally:
+            if os.name == "posix":
+                fcntl.flock(handle, fcntl.LOCK_UN)
+            else:
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
 
 
 def log_result(cfg, result):

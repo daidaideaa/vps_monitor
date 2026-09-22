@@ -50,12 +50,14 @@ def mail_config():
     if str(VMISS_MONITOR) not in sys.path:
         sys.path.insert(0, str(VMISS_MONITOR))
     from monitor import load_config, send_email
-    return load_config(require_smtp=True, require_product=False), send_email
+    return load_config(require_smtp=True), send_email
 
 
 def send_alert(product, event):
     config, send = mail_config()
-    send(config, make_alert(product, event, config))
+    message = make_alert(product, event, config)
+    if not send(config, str(message['Subject']), message.get_content()):
+        raise RuntimeError('SMTP delivery failed; notification remains pending')
 
 
 def notify_product(product, sender, error_after):

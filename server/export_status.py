@@ -106,6 +106,11 @@ def _inventory_history(public, previous):
 
 def snapshot(state, interval=INTERVAL, previous=None):
     """只导出 VMISS，保持原有 schema v1 和未知状态语义。"""
+    if 'last_status' in state:
+        state = {**state, 'target': {'product_name': state.get('product_name'), 'product_url': state.get('product_url')},
+                 'last_confirmed': state.get('last_status'), 'unknown_count': state.get('consecutive_errors', 0),
+                 'last_checked': state.get('last_check'), 'last_unknown_reason': state.get('last_evidence', ''),
+                 'query_location': os.environ.get('QUERY_LOCATION', 'japan-home-vps')}
     target = state.get('target') or {}
     merged = dict(state)
     merged['product_name'] = target.get('product_name', 'JP.TKY.TRI.Basic')

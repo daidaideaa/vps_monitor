@@ -4,10 +4,14 @@ on:
   push:
     paths:
       - 'vmiss-stock-monitor/**'
+      - 'server/**'
+      - 'tests/test_*.py'
       - '.github/workflows/monitor-test.yml'
   pull_request:
     paths:
       - 'vmiss-stock-monitor/**'
+      - 'server/**'
+      - 'tests/test_*.py'
       - '.github/workflows/monitor-test.yml'
   workflow_dispatch:
 
@@ -44,6 +48,8 @@ jobs:
         run: python -m playwright install --with-deps chromium
       - name: Parser, state and SMTP unit tests (no real email)
         run: python -m pytest -q
+      - name: Japan deployment API and state migration tests
+        run: python -m unittest discover -s ../tests -p "test_*.py"
       - name: Check live VMISS once (no email or state changes)
         shell: bash
         run: |

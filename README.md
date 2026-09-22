@@ -1,12 +1,12 @@
 # 东京 VPS 库存观察
 
-独立的 Python VMISS 邮件监控见 [vmiss-stock-monitor/](vmiss-stock-monitor/README.md)，支持 Debian 12、systemd 和 GitHub 手动 SMTP 测试。它单独部署，不直接替换下述现有日本端多商户服务。
+独立的 Python VMISS 邮件监控见 [vmiss-stock-monitor/](vmiss-stock-monitor/README.md)，支持 Debian 12、systemd 和 GitHub 手动 SMTP 测试。日本端调度现在直接复用本仓库这一版本，不再依赖 vps_build 中的旧接口。
 
 [库存页面](https://daidaideaa.github.io/vps_monitor/)由 **JP-HOME-HY2（日本家宽 VPS）**独立检查四家商户的五个套餐并发送邮件。Windows 无需常开，运行链路不再依赖香港 VPS。
 
 | 套餐 | 检查方式 |
 | --- | --- |
-| VMISS JP.TKY.TRI.Basic | 完整 Chromium Headless，独立会话与正常验证恢复 |
+| VMISS JP.TKY.TRI.Basic | 完整 Chromium Headless；挑战页保守返回 unknown |
 | ZgoCloud Tokyo Intel VPS · Starter | HTTP，无法确认时使用 Chromium |
 | RFCHOST JP2-CO-Micro-Lite | Chromium + Xvfb，等待正常验证后严格解析 |
 | V.PS Tokyo Cloud KVM · Starter | 官方订购页，套餐编号 148 |
@@ -69,13 +69,14 @@ STATUS_PUBLISH_URL=https://jp-vps-status.jp-home-subscription.workers.dev/publis
 STATUS_PUBLISH_TOKEN=<与网关一致的专用上传令牌>
 ```
 
-上传本仓库 server/ 后安装、验证：
+上传完整仓库（至少 server/ 与 vmiss-stock-monitor/）后先验证，再安装。已有状态在内存中迁移，首次写回前保存 state.json.before-repo-split，保留去重标记和未知状态语义：
 
 ```bash
 # 开发电脑：替换实际 SSH 地址和端口
-scp -P <SSH端口> -r server root@<日本主机>:/root/vps-monitor-stage
+scp -P <SSH端口> -r server vmiss-stock-monitor <管理用户>@<日本主机>:vps-monitor-stage/
 # 日本 VPS
-sudo bash /root/vps-monitor-stage/install-japan.sh
+sudo bash ~/vps-monitor-stage/server/install-japan.sh --validate
+sudo bash ~/vps-monitor-stage/server/install-japan.sh --apply
 sudo -u vmiss-monitor /opt/vmiss-stock-monitor/.venv/bin/python /opt/vmiss-stock-monitor/monitor.py --test-email
 sudo systemctl start vps-stock-japan.service
 sudo journalctl -u vps-stock-japan.service -n 40 --no-pager
@@ -127,3 +128,9 @@ VMISS --once 只检查，不发邮件、不改状态；串行服务会保存并�
 python -m unittest discover -s tests -v
 node --test tests/frontend.test.cjs tests/gateway.test.mjs
 ```
+
+## 仓库边界与迁移
+
+节点部署、SSH、订阅及链路诊断由 [vps_build](https://github.com/daidaideaa/vps_build) 管理；本仓库负责库存、浏览器、邮件、状态页面、Cloudflare 状态接口及 systemd 定时器。两者独立检出为相邻目录。旧监控代码的有用历史保留在 Git 历史和本地 `.local/legacy-vmiss-stock-monitor/`；私密会话与状态不移动、不覆盖。
+
+`run_japan_cycle.py` 使用 `check_stock` 与新版 Config/Result/邮件接口；`process_result`、`single_instance` 仍存在于本仓库当前版本。旧 `monitored_check` 不再是部署依赖。新版不复用旧持久浏览器会话恢复；遇验证页返回 unknown，不冒充库存已确认。升级可用安装脚本给出的私有备份恢复代码和 unit。
