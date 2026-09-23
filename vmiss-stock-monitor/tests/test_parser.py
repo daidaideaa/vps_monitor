@@ -88,18 +88,25 @@ def test_different_product_and_http_error(page):
     assert m.inspect_page(page, "JP.TKY.BGP.Pro", 403).status == "unknown"
 
 
-def test_check_stock_visits_once_with_mock_browser(monkeypatch):
+def test_check_stock_visits_once_with_mock_browser(monkeypatch, tmp_path):
     page = MagicMock()
     page.url = m.Config.product_url
     page.goto.return_value.status = 200
     page.evaluate.return_value = dict(title="Products", body="", challenge=False, count=1,
                                      text=PRODUCT + " 0 Available", buttons=[])
     playwright = MagicMock()
-    playwright.chromium.launch.return_value.new_context.return_value.new_page.return_value = page
+    page.goto.return_value.headers = {'content-type': 'text/html'}
+    page.title.return_value = 'Products'
+    context = playwright.chromium.launch_persistent_context.return_value
+    context.pages = [page]
     manager = MagicMock()
     manager.__enter__.return_value = playwright
     monkeypatch.setattr(m, "sync_playwright", lambda: manager)
+    monkeypatch.setattr(m, "ROOT", tmp_path)
     assert m.check_stock(m.Config()).status == "unavailable"
+    kwargs = playwright.chromium.launch_persistent_context.call_args.kwargs
+    assert kwargs["timezone_id"] == "Asia/Tokyo"
+    assert kwargs["locale"] == "en-US"
     page.goto.assert_called_once()
 
 
@@ -234,3 +241,4 @@ def test_config_clamp_and_redaction(monkeypatch, tmp_path):
     formatter = m.RedactingFormatter("%(message)s")
     record = logging.LogRecord("test", logging.INFO, "", 1, "failed unit-only-sentinel", (), None)
     assert formatter.format(record) == "failed [REDACTED]"
+

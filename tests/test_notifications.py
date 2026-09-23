@@ -11,7 +11,7 @@ from vps_stock_monitor import make_alert, notify_product, run_once, update_produ
 
 
 class NotificationTest(unittest.TestCase):
-    def test_browser_only_after_unknown_and_its_confirmation_can_notify(self):
+    def test_browser_first_confirmation_can_notify(self):
         browser_calls, sent = [], []
         def http(t):
             return {'status': 'unknown' if t == TARGETS[1] else 'unavailable', 'stock': 0}
@@ -124,3 +124,4 @@ class NotificationTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+

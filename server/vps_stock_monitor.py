@@ -17,6 +17,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen, build_opener, ProxyHandler
+from urllib.error import HTTPError
 
 from stock_targets import INTERVAL, TARGETS
 from export_status import VMISS_MONITOR, _inventory_history, _read_json
@@ -24,6 +25,12 @@ from export_status import VMISS_MONITOR, _inventory_history, _read_json
 STATE = Path('/var/lib/vps-stock-monitor/http-status.json')
 MAX_HTML = 1024 * 1024
 LOG = logging.getLogger('vps-stock-monitor')
+# The shared policy ships with the standalone VMISS engine as well.
+sys.path.insert(0, os.environ.get('VMISS_MONITOR_ROOT', str(
+    Path(__file__).resolve().parents[1] / 'vmiss-stock-monitor'
+    if (Path(__file__).resolve().parents[1] / 'vmiss-stock-monitor').is_dir() else VMISS_MONITOR)))
+from access_policy import backoff, diagnostic, exception_category, observe_page, response_category, retry_remaining
+
 CST = timezone(timedelta(hours=8), name='Asia/Shanghai')
 
 
@@ -249,82 +256,82 @@ def allowed_url(url, target):
 
 
 def check_http(target, proxy_url=None):
+    started = time.monotonic()
+    status, headers, final_url = None, {}, target['product_url']
+    category = ''
     try:
         request = Request(target['product_url'], headers={
-            'User-Agent': 'VPSStockMonitor/2.0 (+https://github.com/daidaideaa/vps_monitor)',
+            'User-Agent': 'Mozilla/5.0',
             'Accept': 'text/html', 'Accept-Language': 'en-US,en;q=0.9',
         })
         opener = build_opener(ProxyHandler({'http': proxy_url, 'https': proxy_url} if proxy_url else {}))
         with opener.open(request, timeout=20) as response:
-            if (response.status != 200 or not allowed_url(response.url, target)
-                    or response.headers.get_content_type() not in {'text/html', 'application/xhtml+xml'}
-                    or response.headers.get('cf-mitigated') == 'challenge'
-                    or response.headers.get('Content-Range')):
-                return unknown('商家响应异常或要求验证')
-            body = response.read(MAX_HTML + 1)
-            if len(body) > MAX_HTML:
-                return unknown('商家页面过大，未解析')
-            html = body.decode(response.headers.get_content_charset() or 'utf-8', errors='replace')
-            # The parser distinguishes normal background JSD from a challenge.
-            # A clearance cookie is not required for an ordinary HTTP 200 catalog.
-            return parse_stock(html, target['provider'], target)
-    except Exception:
-        return unknown('商家请求失败、超时或要求验证')
+            status, headers, final_url = response.status, response.headers, response.url
+            category = response_category(status, headers)
+            if category:
+                result = unknown('商家响应异常或要求验证')
+            elif (not allowed_url(final_url, target)
+                    or headers.get_content_type() not in {'text/html', 'application/xhtml+xml'}
+                    or headers.get('Content-Range')):
+                category, result = 'invalid_response', unknown('商家响应格式异常')
+            else:
+                body = response.read(MAX_HTML + 1)
+                if len(body) > MAX_HTML:
+                    category, result = 'invalid_response', unknown('商家页面过大，未解析')
+                else:
+                    result = parse_stock(body.decode(headers.get_content_charset() or 'utf-8', errors='replace'), target['provider'], target)
+                    if result['status'] == 'unknown':
+                        category = 'challenge_page' if '验证' in result.get('explanation', '') else 'parse_failure'
+    except HTTPError as exc:
+        status, headers, final_url = exc.code, exc.headers, exc.url
+        category, result = response_category(status, headers), unknown('HTTP ' + str(status))
+        exc.close()
+    except Exception as exc:
+        category = exception_category(exc)
+        result = unknown(category)
+    result['diagnostics'] = diagnostic(target['provider'], status, headers, final_url, started=started, category=category)
+    return result
+
+
+def inspect_browser(page, target):
+    html = page.content()
+    if len(html.encode('utf-8')) > MAX_HTML:
+        return unknown('商家页面过大，未解析')
+    result = parse_stock(html, target['provider'], target)
+    return {**result, 'challenge': '验证' in result.get('explanation', '')}
+
+
+def browser_profile(target, proxy_url=None):
+    # Reuse existing RFCHOST/ZgoCloud paths; the two V.PS plans share one merchant.
+    merchant = next(t for t in TARGETS if t['provider'] == target['provider'])
+    profile = STATE.parent / 'browser-profiles' / (merchant['id'] + ('-japan' if proxy_url else ''))
+    profile.mkdir(parents=True, exist_ok=True, mode=0o700)
+    return profile
 
 
 def check_browser(target, proxy_url=None):
     if target['provider'] == 'RFCHOST':
         return check_rfchost_browser(target, proxy_url)
-    # Keep independent merchant sessions so ordinary verification can finish.
+    started = time.monotonic()
     try:
         from playwright.sync_api import sync_playwright
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch_persistent_context(
-                str(STATE.parent / 'browser-profiles' / (target['id'] + ('-japan' if proxy_url else ''))),
-                channel='chromium', headless=True, locale='en-US',
+                str(browser_profile(target, proxy_url)),
+                channel='chromium', headless=True, locale='en-US', timezone_id='Asia/Tokyo',
                 proxy={'server': proxy_url} if proxy_url else None,
                 args=['--disable-dev-shm-usage'], timeout=15000)
             try:
                 page = browser.pages[0] if browser.pages else browser.new_page()
                 for extra in browser.pages[1:]:
                     extra.close()
-                page.set_default_timeout(3000)
-                document = {}
-                def observed(response):
-                    if response.request.is_navigation_request() and response.frame == page.main_frame:
-                        document.update(code=response.status, headers=response.headers)
-                page.on('response', observed)
-                deadline = time.monotonic() + 40
-                page.goto(target['product_url'], wait_until='domcontentloaded', timeout=20000)
-                previous = None
-                result = unknown('浏览器尚未获得正常商家页面')
-                while time.monotonic() < deadline:
-                    headers = document.get('headers', {})
-                    if not allowed_url(page.url, target):
-                        return unknown('浏览器离开目标商家页面')
-                    if document.get('code') == 200 and headers.get('cf-mitigated') != 'challenge':
-                        if (headers.get('content-range') or not re.match(
-                                r'^(text/html|application/xhtml\+xml)\b', headers.get('content-type', ''), re.I)):
-                            return unknown('浏览器响应格式异常')
-                        html = page.content()
-                        if len(html.encode('utf-8')) > MAX_HTML:
-                            return unknown('商家页面过大，未解析')
-                        result = parse_stock(html, target['provider'], target)
-                        if result['status'] != 'unknown' and result == previous:
-                            return result
-                        previous = result
-                    elif document.get('code') == 403 or headers.get('cf-mitigated') == 'challenge':
-                        result = unknown('Cloudflare 验证 / HTTP 403，等待后仍无法读取库存')
-                        previous = None
-                    else:
-                        result = unknown('浏览器响应异常，HTTP ' + str(document.get('code')))
-                        previous = None
-                    page.wait_for_timeout(1500)
-                return unknown(result.get('explanation', '目标套餐未稳定显示'))
+                return observe_page(page, target['product_url'], target['provider'],
+                                    lambda page: inspect_browser(page, target), lambda url: allowed_url(url, target))
             finally:
                 browser.close()
-    except Exception:
-        return unknown('浏览器检查失败、超时或要求验证')
+    except Exception as exc:
+        category = exception_category(exc, True)
+        return {**unknown(category), 'diagnostics': diagnostic(target['provider'], started=started, category=category)}
 
 
 @contextmanager
@@ -364,10 +371,10 @@ def virtual_display():
 def check_rfchost_browser(target, proxy_url=None):
     """Normal Chromium on a VPS virtual display; let site verification run normally."""
     native = browser = None
+    started = time.monotonic()
     try:
         from playwright.sync_api import sync_playwright
-        profile = STATE.parent / 'browser-profiles' / (target['id'] + ('-japan' if proxy_url else ''))
-        profile.mkdir(parents=True, exist_ok=True, mode=0o700)
+        profile = browser_profile(target, proxy_url)
         with virtual_display(), sync_playwright() as playwright:
             with socket.socket() as bound:
                 bound.bind(('127.0.0.1', 0))
@@ -376,10 +383,11 @@ def check_rfchost_browser(target, proxy_url=None):
             native = subprocess.Popen([
                 playwright.chromium.executable_path, '--no-sandbox', '--disable-dev-shm-usage',
                 '--no-first-run', '--no-default-browser-check', '--disable-background-networking',
+                '--lang=en-US',
                 '--disable-extensions', '--disable-sync', '--window-size=1280,900',
                 '--remote-debugging-address=127.0.0.1', f'--remote-debugging-port={port}',
                 f'--user-data-dir={profile}', *([f'--proxy-server={proxy_url}'] if proxy_url else []), 'about:blank',
-            ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env={**os.environ, 'TZ': 'Asia/Tokyo'})
             try:
                 ready = False
                 deadline = time.monotonic() + 40
@@ -396,45 +404,19 @@ def check_rfchost_browser(target, proxy_url=None):
                         pass
                     time.sleep(2)
                 if not ready:
-                    return unknown('RFCHOST 浏览器启动超时')
+                    raise TimeoutError('Browser startup timeout')
                 browser = playwright.chromium.connect_over_cdp(endpoint, timeout=10000)
                 context = browser.contexts[0]
                 page = context.pages[0] if context.pages else context.new_page()
                 for extra in context.pages:
                     if extra != page:
                         extra.close()
-                # Observe the first visit and any normal verification navigation.
-                # Never reload a page just because its challenge has completed.
-                document = {}
-                def observed(response):
-                    if response.request.is_navigation_request() and response.frame == page.main_frame:
-                        document.update(code=response.status, headers=response.headers)
-                page.on('response', observed)
-                page.set_default_timeout(3000)
-                deadline = time.monotonic() + 40
-                page.goto(target['product_url'], wait_until='domcontentloaded', timeout=20000)
-                previous = None
-                result = unknown('Cloudflare 验证仍未完成，无法读取 RFCHOST 库存')
-                while time.monotonic() < deadline:
-                    headers = document.get('headers', {})
-                    if not allowed_url(page.url, target):
-                        return unknown('浏览器离开 RFCHOST 目标页面')
-                    if document.get('code') == 200 and headers.get('cf-mitigated') != 'challenge':
-                        if (headers.get('content-range') or not re.match(
-                                r'^(text/html|application/xhtml\+xml)\b', headers.get('content-type', ''), re.I)):
-                            return unknown('RFCHOST 页面响应格式异常')
-                        html = page.content()
-                        if len(html.encode('utf-8')) > MAX_HTML:
-                            return unknown('RFCHOST 页面过大')
-                        result = parse_stock(html, target['provider'], target)
-                        if result['status'] != 'unknown' and result == previous:
-                            return result
-                        previous = result
-                    else:
-                        previous = None
-                        result = unknown('Cloudflare 验证 / HTTP ' + str(document.get('code')))
-                    page.wait_for_timeout(1500)
-                return unknown(result.get('explanation', 'RFCHOST 目标库存未稳定显示'))
+                session = context.new_cdp_session(page)
+                session.send('Emulation.setTimezoneOverride', {'timezoneId': 'Asia/Tokyo'})
+                session.send('Emulation.setLocaleOverride', {'locale': 'en-US'})
+                context.set_extra_http_headers({'Accept-Language': 'en-US,en;q=0.9'})
+                return observe_page(page, target['product_url'], target['provider'],
+                                    lambda page: inspect_browser(page, target), lambda url: allowed_url(url, target))
             finally:
                 if browser:
                     try:
@@ -452,8 +434,8 @@ def check_rfchost_browser(target, proxy_url=None):
                             native.kill()
                             native.wait(timeout=2)
     except Exception as exc:
-        LOG.warning('RFCHOST browser check failed (%s)', type(exc).__name__)
-        return unknown('RFCHOST 浏览器检查失败或超时')
+        category = exception_category(exc, True)
+        return {**unknown(category), 'diagnostics': diagnostic('RFCHOST', started=started, category=category)}
 
 
 def update_product(target, result, previous, checked):
@@ -481,6 +463,9 @@ def update_product(target, result, previous, checked):
     if status != 'unknown' and product['baseline_required']:
         product['stock_notified'] = status == 'available'
         product['baseline_required'] = False
+    product.update(backoff(previous, status, result.get('diagnostics', {})))
+    if 'diagnostics' in result:
+        product['diagnostics'] = {**result['diagnostics'], 'challenge_consecutive_count': product['challenge_consecutive_count']}
     product.update(_inventory_history(product, previous))
     return product
 
@@ -504,20 +489,30 @@ def run_once(output=STATE, http_check=check_http, browser_check=check_browser, s
     if corrupt:
         previous = {t['id']: {**t, 'baseline_required': True} for t in TARGETS}
     products = dict(previous)
+    data = state
     for target in TARGETS:
-        result = http_check(target)
-        method = 'http'
-        if result['status'] == 'unknown':
-            result = browser_check(target)
-            method = 'playwright'
+        old = previous.get(target['id'], {})
+        if any(p.get('provider') == target['provider'] and retry_remaining(p)
+               for p in products.values()):
+            continue
+        if target['provider'] == 'RFCHOST':
+            result, method = browser_check(target), 'playwright'
+        else:
+            result, method = http_check(target), 'http'
+            if result['status'] == 'unknown':
+                http_diag = result.get('diagnostics', {})
+                result, method = browser_check(target), 'playwright'
+                # Preserve evidence of a challenge if browser startup subsequently fails.
+                if http_diag.get('failure_category') in {'http_403', 'cf_mitigated_challenge', 'challenge_page'} and result['status'] == 'unknown':
+                    result.setdefault('diagnostics', {})['challenge_observed'] = True
         checked = datetime.now(timezone.utc).isoformat()
-        old = previous.get(target['id'])
         product = update_product(target, result, old, checked)
         products[target['id']] = product
         # Commit each product independently, so a later failure cannot erase its result.
         save_snapshot(output, products, checked)
         notify_product(product, sender, error_after)
         data = save_snapshot(output, products, checked)
+        LOG.info('access=%s', json.dumps(product.get('diagnostics', {}), ensure_ascii=False))
         LOG.info('%s %s status=%s method=%s', target['provider'], target['product_name'], product['status'], method)
     return data
 

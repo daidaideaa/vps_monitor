@@ -42,10 +42,14 @@ class IntegrationTests(unittest.TestCase):
 
     def test_vmiss_accepts_normal_navigation_after_initial_challenge(self):
         cfg = monitor.Config()
-        with patch.object(monitor, 'sync_playwright') as playwright:
-            page = playwright.return_value.__enter__.return_value.chromium.launch.return_value.new_context.return_value.new_page.return_value
+        with tempfile.TemporaryDirectory() as tmp, patch.object(monitor, 'ROOT', Path(tmp)), patch.object(monitor, 'sync_playwright') as playwright:
+            context = playwright.return_value.__enter__.return_value.chromium.launch_persistent_context.return_value
+            page = MagicMock()
+            context.pages = [page]
+            page.title.return_value = 'VMISS'
             page.url = cfg.product_url
             page.goto.return_value.status = 403
+            page.goto.return_value.headers = {"content-type": "text/html"}
             page.evaluate.return_value = {'title': 'VMISS', 'body': '0 可用', 'challenge': False,
                                           'count': 1, 'text': '0 可用', 'buttons': ['立即订购']}
             def navigated(*args):
@@ -125,3 +129,4 @@ class IntegrationTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+

@@ -6,7 +6,8 @@ from pathlib import Path
 
 sys.path.insert(0, os.environ.get('VMISS_MONITOR_ROOT', str(Path(__file__).resolve().parents[1] / 'vmiss-stock-monitor')))
 import monitor
-from vps_stock_monitor import run_once, send_alert, STATE, LOG as STOCK_LOG
+from vps_stock_monitor import run_once, send_alert, LOG as STOCK_LOG
+from access_policy import retry_remaining
 
 def main():
     os.environ['QUERY_LOCATION'] = 'japan-home-vps'
@@ -20,10 +21,12 @@ def main():
     with monitor.single_instance():
         path = monitor.ROOT / 'state.json'
         state = monitor.load_state(path, cfg)
-        monitor.LOG.info('Checking %s directly on Japan VPS', cfg.product_name)
-        result = monitor.check_stock(cfg)
-        monitor.log_result(cfg, result)
-        monitor.process_result(cfg, state, result, path)
+        if not retry_remaining(state):
+            monitor.LOG.info('Checking %s directly on Japan VPS', cfg.product_name)
+            result = monitor.check_stock(cfg)
+            monitor.log_result(cfg, result)
+            monitor.process_result(cfg, state, result, path)
         run_once(sender=send_alert, error_after=cfg.error_after)
 
 if __name__ == '__main__': main()
+

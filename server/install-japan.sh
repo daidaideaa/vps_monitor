@@ -10,7 +10,7 @@ check() {
   test -f /opt/vmiss-stock-monitor/.env
   test -f /etc/vps-status-publisher.env
   id vmiss-monitor >/dev/null
-  "$python" -c 'import ast,pathlib; [ast.parse(p.read_text()) for p in list(pathlib.Path(".").glob("*.py"))+[pathlib.Path("../vmiss-stock-monitor/monitor.py")]]; import dotenv,playwright'
+  "$python" -c 'import ast,pathlib; [ast.parse(p.read_text()) for p in list(pathlib.Path(".").glob("*.py"))+list(pathlib.Path("../vmiss-stock-monitor").glob("*.py"))]; import dotenv,playwright'
   VMISS_MONITOR_ROOT="$(cd ../vmiss-stock-monitor && pwd)" "$python" -c 'import run_japan_cycle; from vps_stock_monitor import mail_config, virtual_display; assert callable(virtual_display); assert callable(run_japan_cycle.monitor.check_stock); assert hasattr(run_japan_cycle.monitor.Config(), "error_after")'
   systemd-analyze verify vps-stock-japan.service vps-status-publish.service
 }
@@ -27,7 +27,7 @@ case "$(systemctl show -p ActiveState --value vps-stock-japan.service)" in
 esac
 backup=$(mktemp -d /opt/vmiss-stock-monitor/repo-split-backup.XXXXXX)
 chmod 700 "$backup"
-files=(/opt/vmiss-stock-monitor/monitor.py /opt/vmiss-stock-monitor/requirements.txt)
+files=(/opt/vmiss-stock-monitor/monitor.py /opt/vmiss-stock-monitor/access_policy.py /opt/vmiss-stock-monitor/requirements.txt)
 for name in stock_targets.py export_status.py vps_stock_monitor.py run_japan_cycle.py publish_status.py; do files+=("/opt/vmiss-public-status/$name"); done
 for name in vps-stock-japan.service vps-stock-japan.timer vps-status-publish.service vps-status-publish.timer; do files+=("/etc/systemd/system/$name"); done
 for path in "${files[@]}"; do
@@ -48,7 +48,7 @@ trap rollback ERR
 install -d -m 755 /opt/vmiss-public-status
 install -d -o vmiss-monitor -g vmiss-monitor -m 700 /var/lib/vps-stock-monitor
 install -d -o vmiss-monitor -g vmiss-monitor -m 755 /var/lib/vmiss-public-status
-install -m 644 ../vmiss-stock-monitor/monitor.py ../vmiss-stock-monitor/requirements.txt /opt/vmiss-stock-monitor/
+install -m 644 ../vmiss-stock-monitor/monitor.py ../vmiss-stock-monitor/access_policy.py ../vmiss-stock-monitor/requirements.txt /opt/vmiss-stock-monitor/
 install -m 644 stock_targets.py export_status.py vps_stock_monitor.py run_japan_cycle.py publish_status.py /opt/vmiss-public-status/
 install -m 644 vps-stock-japan.service vps-stock-japan.timer vps-status-publish.service vps-status-publish.timer /etc/systemd/system/
 systemctl daemon-reload

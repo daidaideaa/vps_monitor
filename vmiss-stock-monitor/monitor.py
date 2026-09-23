@@ -12,7 +12,7 @@ import ssl
 import tempfile
 import time
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from email.message import EmailMessage
 from pathlib import Path
@@ -22,6 +22,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright
+from access_policy import backoff, diagnostic, exception_category, observe_page, retry_remaining
 
 ROOT = Path(__file__).resolve().parent
 LOG = logging.getLogger("vmiss")
@@ -129,6 +130,7 @@ class Result:
     rule: str = "unknown"
     title: str = ""
     snippet: str = ""
+    diagnostics: dict = field(default_factory=dict, compare=False)
 
 
 def parse_region(text, buttons=()):
@@ -213,67 +215,45 @@ def inspect_page(page, product_name, http_status=200):
     return Result(parsed.status, parsed.evidence, parsed.rule, title, data["text"][:800])
 
 
-def save_screenshot(page, status):
-    # 固定文件名，最多两张，避免长跑占满磁盘。
-    try:
-        directory = ROOT / "screenshots"
-        directory.mkdir(mode=0o700, exist_ok=True)
-        page.screenshot(path=str(directory / f"{status}.png"), timeout=5000)
-    except Exception:
-        LOG.warning("Screenshot could not be saved")
-
-
 def check_stock(cfg, screenshot_unknown=False):
+    # No screenshots/HTML dumps. Chromium owns its private, persistent session.
+    started = time.monotonic()
     result = Result(evidence="Page load failed", rule="load_error")
+    expected = urlsplit(cfg.product_url)
+    def allowed(url):
+        actual = urlsplit(url)
+        return (actual.scheme, actual.netloc, actual.path.rstrip('/')) == (expected.scheme, expected.netloc, expected.path.rstrip('/'))
+    def inspect(page):
+        nonlocal result
+        result = inspect_page(page, cfg.product_name, 200)
+        return {'status': result.status, 'evidence': result.evidence, 'snippet': result.snippet,
+                'challenge': result.rule == 'blocked'}
     try:
+        profile = ROOT / 'browser-profile'
+        profile.mkdir(mode=0o700, exist_ok=True)
         with sync_playwright() as p:
-            browser = p.chromium.launch(
-                channel="chromium", headless=True, timeout=cfg.timeout_ms,
+            context = p.chromium.launch_persistent_context(
+                str(profile), channel="chromium", headless=True, timeout=cfg.timeout_ms,
+                locale="en-US", timezone_id="Asia/Tokyo",
+                args=['--disable-dev-shm-usage'],
                 env={k: v for k, v in os.environ.items() if k not in SECRET_KEYS},
             )
             try:
-                context = browser.new_context(locale="zh-CN", timezone_id=cfg.timezone)
-                page = context.new_page()
-                page.set_default_timeout(cfg.timeout_ms)
-                document = {}
-                def observed(response):
-                    if response.request.is_navigation_request() and response.frame == page.main_frame:
-                        document.update(status=response.status, headers=response.headers)
-                page.on('response', observed)
-                deadline = time.monotonic() + cfg.timeout_ms / 1000
-                response = page.goto(cfg.product_url, wait_until="domcontentloaded", timeout=cfg.timeout_ms)
-                document.setdefault('status', response.status if response else None)
-                expected = urlsplit(cfg.product_url)
-                actual = urlsplit(page.url)
-                if (actual.scheme, actual.netloc, actual.path.rstrip('/')) != (expected.scheme, expected.netloc, expected.path.rstrip('/')):
-                    return Result(evidence="Unexpected page redirect", rule="redirect")
-                previous = None
-                # 同一次访问两次一致观测，避免加载途中按钮先出现造成误报。
-                while True:
-                    actual = urlsplit(page.url)
-                    if (actual.scheme, actual.netloc, actual.path.rstrip('/')) != (expected.scheme, expected.netloc, expected.path.rstrip('/')):
-                        return Result(evidence="Unexpected page redirect", rule="redirect")
-                    if document.get('headers', {}).get('cf-mitigated') == 'challenge':
-                        result = Result(evidence="Cloudflare challenge", rule="blocked")
-                    else:
-                        result = inspect_page(page, cfg.product_name, document['status'])
-                    signature = (result.status, result.evidence, result.snippet)
-                    if result.status != "unknown" and signature == previous:
-                        break
-                    if time.monotonic() >= deadline:
-                        if result.status != "unknown":
-                            result = Result(evidence="Product did not stabilize", rule="unstable")
-                        break
-                    previous = signature
-                    page.wait_for_timeout(500)
-                if result.status == "available" or (result.status == "unknown" and screenshot_unknown):
-                    save_screenshot(page, result.status)
+                page = context.pages[0] if context.pages else context.new_page()
+                for extra in context.pages[1:]:
+                    extra.close()
+                observed = observe_page(page, cfg.product_url, 'VMISS', inspect, allowed,
+                                        timeout_ms=cfg.timeout_ms)
+                if observed['status'] == 'unknown':
+                    return Result(evidence=observed.get('explanation', 'Cannot determine stock'),
+                                  rule=observed['diagnostics']['failure_category'], diagnostics=observed['diagnostics'])
+                return replace(result, diagnostics=observed['diagnostics'])
             finally:
-                browser.close()
-    except Exception:
-        # Playwright 原始异常可能含 URL、环境路径等内容，不进入日志或邮件。
-        result = Result(evidence="Browser unavailable, timeout, page load or DOM failure", rule="browser_error")
-    return result
+                context.close()
+    except Exception as exc:
+        category = exception_category(exc, True)
+        return Result(evidence=category, rule=category,
+                      diagnostics=diagnostic('VMISS', started=started, category=category))
 
 
 def now(cfg):
@@ -382,6 +362,9 @@ def send_email(cfg, subject, body):
 
 def process_result(cfg, state, result, path, sender=send_email):
     updated = {**state, "last_check": now(cfg), "last_evidence": result.evidence}
+    updated.update(backoff(state, result.status, result.diagnostics))
+    updated['access_diagnostics'] = {**result.diagnostics, 'challenge_consecutive_count': updated['challenge_consecutive_count']}
+    LOG.info('access=%s', json.dumps(updated['access_diagnostics'], ensure_ascii=False))
     alert = None
     if result.status == "unknown":
         updated["consecutive_errors"] += 1
@@ -445,7 +428,7 @@ def single_instance():
 
 def log_result(cfg, result):
     LOG.info("product=%s status=%s evidence=%s", cfg.product_name, result.status, result.evidence)
-    LOG.debug("page_title=%s target_text=%s rule=%s", result.title, result.snippet, result.rule)
+    LOG.debug("rule=%s", result.rule)
 
 
 def main(argv=None):
@@ -453,7 +436,7 @@ def main(argv=None):
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--once", action="store_true", help="检查一次，不发邮件、不更新状态；unknown 返回 2")
     modes.add_argument("--test-email", action="store_true", help="只发送测试邮件，不访问 VMISS")
-    parser.add_argument("--debug", action="store_true", help="打印页面标题、目标卡片和规则，不打印凭据")
+    parser.add_argument("--debug", action="store_true", help="打印诊断规则，不打印页面内容或凭据")
     args = parser.parse_args(argv)
     setup_logging(args.debug)
     try:
@@ -464,7 +447,9 @@ def main(argv=None):
                 LOG.info("Test email accepted by SMTP; confirm receipt in your mailbox")
             return 0 if sent else 1
         if args.once:
-            result = check_stock(cfg)
+            with single_instance():
+                result = check_stock(cfg)
+            LOG.info("access=%s", json.dumps(result.diagnostics, ensure_ascii=False))
             log_result(cfg, result)
             return 2 if result.status == "unknown" else 0
         stop = Event()
@@ -474,6 +459,9 @@ def main(argv=None):
             path = ROOT / "state.json"
             state = load_state(path, cfg)
             while not stop.is_set():
+                if retry_remaining(state):
+                    stop.wait(min(60, retry_remaining(state)))
+                    continue
                 started = time.monotonic()
                 result = check_stock(cfg, screenshot_unknown=state["consecutive_errors"] + 1 >= cfg.error_after)
                 log_result(cfg, result)
@@ -491,3 +479,4 @@ def main(argv=None):
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

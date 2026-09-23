@@ -7,7 +7,7 @@ python3 -I - <<'PY'
 from pathlib import Path
 import stat
 root = Path('/opt/vps-monitor-approved')
-files = ['vmiss-stock-monitor/monitor.py', 'vmiss-stock-monitor/requirements.txt']
+files = ['vmiss-stock-monitor/monitor.py', 'vmiss-stock-monitor/access_policy.py', 'vmiss-stock-monitor/requirements.txt']
 files += ['server/' + name for name in (
     'install-japan.sh', 'stock_targets.py', 'export_status.py', 'vps_stock_monitor.py',
     'run_japan_cycle.py', 'publish_status.py', 'vps-stock-japan.service',

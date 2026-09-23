@@ -149,6 +149,13 @@ VMISS 实时检查若返回 unknown，workflow 会明确显示 warning 和 Job s
 
 ## 文件
 
-核心逻辑只有 `monitor.py`；`requirements.txt` 锁定依赖，`tests/test_parser.py` 使用离线 Chromium 页面和 SMTP 替身验证误报、状态与邮件。`.env`、状态、截图、锁文件和虚拟环境均被忽略。
+库存与邮件逻辑在 `monitor.py`；`access_policy.py` 共享单次浏览器观察、脱敏诊断和 Challenge 退避；`requirements.txt` 锁定依赖，`tests/test_parser.py` 使用离线 Chromium 页面和 SMTP 替身验证误报、状态与邮件。`.env`、状态、browser-profile、锁文件和虚拟环境均被忽略。不会保存页面截图或完整 HTML。
 
 浏览器与系统依赖安装参考 [Playwright 官方文档](https://playwright.dev/python/docs/browsers#install-system-dependencies)。
+
+
+## 持久浏览器与 Challenge 退避
+
+VMISS 固定复用本目录 `browser-profile/`，环境为 `en-US` / `Asia/Tokyo`；邮件时间仍使用原 TIMEZONE。浏览器正常保存 cookies/localStorage/cache，不导出或延长 cookie 有效期；profile 必须保持私有，不能提交仓库。`--once` 也取得同一文件锁，避免与服务争用 profile。
+
+403 / Cloudflare Challenge / 验证页触发 30min → 1h → 2h 退避，写入原 state.json；确认正常库存后重置。正常独立服务仍使用 CHECK_INTERVAL_SECONDS，日本统一入口仍按 8～12 分钟定时器调度，退避只影响 VMISS。跳过的轮次不改变库存历史或邮件去重。诊断不含 query、cookie、卡片文本、HTML 或原始异常；`--once` 不写库存状态，但会正常更新浏览器私有缓存/profile。

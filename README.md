@@ -6,9 +6,9 @@
 
 | 套餐 | 检查方式 |
 | --- | --- |
-| VMISS JP.TKY.TRI.Basic | 完整 Chromium Headless；挑战页保守返回 unknown |
+| VMISS JP.TKY.TRI.Basic | Chromium Headless 优先，固定持久 profile；挑战页返回 unknown |
 | ZgoCloud Tokyo Intel VPS · Starter | HTTP，无法确认时使用 Chromium |
-| RFCHOST JP2-CO-Micro-Lite | HTTP 优先；无法确认时 Chromium + Xvfb，一次访问等待正常验证 |
+| RFCHOST JP2-CO-Micro-Lite | Chromium + Xvfb 优先，复用原 profile；一次访问等待正常验证 |
 | V.PS Tokyo Cloud KVM · Starter | 官方订购页，套餐编号 148 |
 | V.PS Tokyo Cloud KVM · Essential | 官方订购页，套餐编号 149 |
 
@@ -35,7 +35,7 @@ VMISS 主程序来自独立项目 vmiss-stock-monitor/monitor.py，部署到 /op
 
 ## 日本端安装：Debian 12 / 13
 
-将 VMISS 的 monitor.py、requirements.txt 和私密 .env 上传到 /opt/vmiss-stock-monitor/。已有用户、环境和状态可复用，不覆盖运行数据。
+将 VMISS 的 monitor.py、access_policy.py、requirements.txt 和私密 .env 上传到 /opt/vmiss-stock-monitor/。已有用户、环境和状态可复用，不覆盖运行数据。
 
 ```bash
 sudo apt update
@@ -135,6 +135,18 @@ node --test tests/frontend.test.cjs tests/gateway.test.mjs
 
 节点部署、SSH、订阅及链路诊断由 [vps_build](https://github.com/daidaideaa/vps_build) 管理；本仓库负责库存、浏览器、邮件、状态页面、Cloudflare 状态接口及 systemd 定时器。两者独立检出为相邻目录。旧监控代码的有用历史保留在 Git 历史和本地 `.local/legacy-vmiss-stock-monitor/`；私密会话与状态不移动、不覆盖。
 
-`run_japan_cycle.py` 使用 `check_stock` 与新版 Config/Result/邮件接口；`process_result`、`single_instance` 仍存在于本仓库当前版本。旧 `monitored_check` 不再是部署依赖。新版不复用旧持久浏览器会话恢复；遇验证页返回 unknown，不冒充库存已确认。升级可用安装脚本给出的私有备份恢复代码和 unit。
+`run_japan_cycle.py` 使用 `check_stock` 与新版 Config/Result/邮件接口；`process_result`、`single_instance` 仍存在于本仓库当前版本。旧 `monitored_check` 不再是部署依赖。VMISS 使用固定 browser-profile/；其他商家沿用 browser-profiles/ 下的既有目录（V.PS 两个套餐共用 Starter 的目录）。浏览器自行管理 cookies/localStorage/cache，不清理或导出会话。遇验证页返回 unknown。升级可用安装脚本给出的私有备份恢复代码和 unit。
 
 GitHub 的专用 SSH 密钥保存在 `vps_build` 的 `vps-production` Environment；固定 `deploy` 操作只运行本仓库 `server/deploy-approved.sh`，应用 root 预先放置的 `/opt/vps-monitor-approved`。该账户无任意命令、文件上传或通用 sudo 权限。源代码由管理员审核后更新批准目录；运行中的库存检查和 VPN 不会被部署强制中断。
+
+
+## JP-Home 访问稳定性与诊断
+
+- VMISS、RFCHOST 每轮直接使用浏览器，不先发送一次注定被拦截的 HTTP 请求。其他商家保留 HTTP → 必要时浏览器；HTTP 使用固定通用 `Mozilla/5.0` 标识，浏览器使用自身默认 UA，不随机伪造指纹。
+- 所有浏览器固定 `en-US`、`Asia/Tokyo`。RFCHOST 保留已有 Xvfb + 非 headless Chromium；VMISS 保留 headless，先解决临时 profile 丢失问题。未在 JP-Home 做模式对照测试，不声称非 headless 必然更有效；不新增 stealth 依赖。
+- 每次只主动导航一次，观察正常验证产生的最终主文档响应。导航等待超时后，如观察窗口尚有时间，继续等待；不会 reload/goto 重试。HTTP 403、`cf-mitigated: challenge` 或验证页面始终是 unknown，只有正常主文档及连续两次一致的严格解析才确认库存。
+- Challenge/403 按商家持久退避 30 分钟 → 1 小时 → 2 小时（封顶），确认有货或无货后归零。期间网络错误不会被当成验证解除。8～12 分钟的原定时器不变，退避到期后的下一轮再检查，因此实际间隔可能额外延后最多一轮。其他商家照常检查。跳过的目标不更新 last_checked、库存和邮件次数；原邮件去重和 Worker 发布白名单保持不变。
+- 私有状态和日志只添加 provider、HTTP status、cf-mitigated、cf-ray、最终 host/path（去掉 query/fragment/用户信息）、截断标题、耗时、连续验证次数和失败类别。区分 dns_failure、network_failure/network_timeout、tls_failure、http_403、cf_mitigated_challenge、challenge_page、parse_failure、browser_timeout 等。无 HTML、截图、cookie 导出或原始异常文本；浏览器自身 profile 属于私密运行数据，不提交或上传。
+- 安装脚本同步备份/安装共享 access_policy.py，不覆盖库存状态和 profile。提交代码不会自动更新 JP-Home；原有受控安装流程仍适用，无需修改或重启 VPN。profile 是浏览器正常磁盘状态，站点自行设置的过期时间与浏览器 session 生命周期仍有效，不延长 clearance、不恢复过期凭据。
+
+诊断依据：[Cloudflare Challenge 响应头](https://developers.cloudflare.com/cloudflare-challenges/challenge-types/challenge-pages/detect-response/)、[Playwright 持久 Context](https://playwright.dev/python/docs/api/class-browsertype#browser-type-launch-persistent-context)。这些改动减少重复请求和会话丢失；不能修复商家针对 IP/ASN 的拒绝策略，也不保证 Challenge 消失。

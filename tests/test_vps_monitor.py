@@ -98,7 +98,7 @@ class StateTest(unittest.TestCase):
         self.assertEqual(gap['unavailable_since'], resumed['unavailable_since'])
         self.assertEqual(gap['last_available_at'], available['last_checked'])
 
-    def test_http_success_skips_browser_unknown_falls_back(self):
+    def test_http_success_skips_browser_rfchost_is_browser_first(self):
         browser_calls = []
         def http(target):
             return {'status': 'unknown' if target['provider'] == 'RFCHOST' else 'unavailable', 'stock': 0}
@@ -115,13 +115,11 @@ class StateTest(unittest.TestCase):
 
     def test_first_result_survives_later_unexpected_failure(self):
         def http(target):
-            if target['provider'] == 'RFCHOST':
-                raise RuntimeError('interrupted')
             return {'status': 'unavailable', 'stock': 0}
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'status.json'
             with self.assertRaises(RuntimeError):
-                run_once(path, http)
+                run_once(path, http, lambda target: (_ for _ in ()).throw(RuntimeError('interrupted')))
             self.assertEqual(json.loads(path.read_text())['products'][0]['status'], 'unavailable')
 
     def test_export_five_vps_products_and_no_credentials(self):
@@ -150,3 +148,4 @@ class StateTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
