@@ -9,6 +9,54 @@ from urllib.parse import urlsplit
 CHALLENGES = {'http_403', 'cf_mitigated_challenge', 'challenge_page'}
 
 
+class ChallengeSignals:
+    """Bounded private counters; never retain request URLs, headers or messages."""
+    def __init__(self, target):
+        self.host = urlsplit(target).hostname
+        self.events = {}
+        self.codes = set()
+
+    def record(self, key):
+        if key in self.events or len(self.events) < 32:
+            self.events[key] = min(999, self.events.get(key, 0) + 1)
+
+    def kind(self, url):
+        parsed = urlsplit(url)
+        host = parsed.hostname or ''
+        if host.endswith('.challenges.cloudflare.com') or host == 'dnstest.dev' or host.endswith('.dnstest.dev'):
+            return 'nonfatal_dns_probe'
+        if host == 'challenges.cloudflare.com' or (host == self.host and parsed.path.startswith('/cdn-cgi/challenge-platform/')):
+            return 'pat' if '/pat/' in parsed.path else 'challenge'
+        return ''
+
+    def response(self, response):
+        kind = self.kind(getattr(response, 'url', ''))
+        if kind and type(response.status) is int and 100 <= response.status <= 599:
+            self.record(f'{kind}_http_{response.status}')
+
+    def failed(self, request):
+        kind = self.kind(request.url)
+        if not kind:
+            return
+        error = str(request.failure or '')
+        category = next((name for pattern, name in (
+            ('ERR_NAME_NOT_RESOLVED', 'dns'), ('ERR_TIMED_OUT', 'timeout'),
+            ('ERR_CERT_', 'tls'), ('ERR_SSL_', 'tls'), ('ERR_BLOCKED_BY_CLIENT', 'blocked_by_client'),
+            ('ERR_ABORTED', 'aborted')) if pattern in error), 'network')
+        self.record(f'{kind}_failed_{category}')
+
+    def console(self, message):
+        text = message.text
+        if 'content security policy' in text.lower():
+            self.record('console_csp')
+        if re.search(r'turnstile|cloudflare.*challenge', text, re.I):
+            self.codes.update(re.findall(r'\b(?:100|102|103|104|105|106|110|120|200|300|400|600)\d{3}\b', text)[:8])
+            self.codes = set(sorted(self.codes)[:8])
+
+    def snapshot(self):
+        return {'events': dict(self.events), 'error_codes': sorted(self.codes)}
+
+
 def exception_category(exc, browser=False):
     reason = getattr(exc, 'reason', exc)
     text = str(reason).lower()  # Classify locally; never log raw exceptions.
@@ -73,10 +121,12 @@ def observe_page(page, url, provider, inspect, allowed, timeout_ms=40000):
     title = ''
     category = 'browser_timeout'
     seen_challenge = False
+    signals = ChallengeSignals(url)
     result = {'status': 'unknown', 'explanation': '浏览器未获得稳定商家页面'}
 
     def observed(response):
         nonlocal seen_challenge
+        signals.response(response)
         if response.request.is_navigation_request() and response.frame == page.main_frame:
             document.update(status=response.status, headers=response.headers)
             seen_challenge |= response_category(response.status, response.headers) in CHALLENGES
@@ -85,9 +135,12 @@ def observe_page(page, url, provider, inspect, allowed, timeout_ms=40000):
         diag = diagnostic(provider, document.get('status'), document.get('headers'),
                           page.url, title, started, category)
         diag['challenge_observed'] = seen_challenge and value['status'] == 'unknown'
+        diag['challenge_signals'] = signals.snapshot()
         return {**value, 'diagnostics': diag}
 
     page.on('response', observed)
+    page.on('requestfailed', signals.failed)
+    page.on('console', signals.console)
     page.set_default_timeout(3000)
     try:
         try:
@@ -154,3 +207,5 @@ def observe_page(page, url, provider, inspect, allowed, timeout_ms=40000):
         return finish({'status': 'unknown', 'explanation': category})
     finally:
         page.remove_listener('response', observed)
+        page.remove_listener('requestfailed', signals.failed)
+        page.remove_listener('console', signals.console)

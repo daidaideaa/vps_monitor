@@ -148,6 +148,9 @@ GitHub 的专用 SSH 密钥保存在 `vps_build` 的 `vps-production` Environmen
 - 首次导航超时但还停留在 `about:blank` 时，继续等待首个主文档到达，直到原观察期限；不能提前把尚在加载的空白页当成离开商家页面。未收到主文档时不解析库存，也不增加导航次数。
 - Challenge/403 按商家持久退避 30 分钟 → 1 小时 → 2 小时（封顶），确认有货或无货后归零。期间网络错误不会被当成验证解除。8～12 分钟的原定时器不变，退避到期后的下一轮再检查，因此实际间隔可能额外延后最多一轮。其他商家照常检查。跳过的目标不更新 last_checked、库存和邮件次数；原邮件去重和 Worker 发布白名单保持不变。
 - 私有状态和日志只添加 provider、HTTP status、cf-mitigated、cf-ray、最终 host/path（去掉 query/fragment/用户信息）、截断标题、耗时、连续验证次数和失败类别。区分 dns_failure、network_failure/network_timeout、tls_failure、http_403、cf_mitigated_challenge、challenge_page、parse_failure、browser_timeout 等。无 HTML、截图、cookie 导出或原始异常文本；浏览器自身 profile 属于私密运行数据，不提交或上传。
+- `challenge_signals` 记录验证资源的有限 HTTP/网络错误计数及 Turnstile 数字错误码，不保存资源 URL、请求头、Cookie 或控制台原文。`challenge_failed_dns/tls/timeout` 可用于定位验证资源加载问题；`pat_http_401` 与 `nonfatal_dns_probe_failed_dns` 可能是 Cloudflare 的正常探测，不能单独认定为故障。没有错误码也不证明验证通过，库存仍取决于正常主文档及严格解析。信号只在原本的一次导航中观察，不新增请求或绕过退避。
 - 安装脚本同步备份/安装共享 access_policy.py，不覆盖库存状态和 profile。提交代码不会自动更新 JP-Home；原有受控安装流程仍适用，无需修改或重启 VPN。profile 是浏览器正常磁盘状态，站点自行设置的过期时间与浏览器 session 生命周期仍有效，不延长 clearance、不恢复过期凭据。
 
 诊断依据：[Cloudflare Challenge 响应头](https://developers.cloudflare.com/cloudflare-challenges/challenge-types/challenge-pages/detect-response/)、[Playwright 持久 Context](https://playwright.dev/python/docs/api/class-browsertype#browser-type-launch-persistent-context)。这些改动减少重复请求和会话丢失；不能修复商家针对 IP/ASN 的拒绝策略，也不保证 Challenge 消失。
+
+Cloudflare [不支持自动化浏览器解决生产验证](https://developers.cloudflare.com/cloudflare-challenges/reference/supported-browsers/)。退避只是降低请求频率，不会解除商家的验证策略。若验证资源加载正常却持续被拦截，需要商家根据时间和 Ray ID 查其安全事件，并确认是否提供只读库存接口或允许固定出口的低频监控。日本家宽出口、非 headless 浏览器和持久会话均不等于必然获准；不要仅凭 403 认定 IP 已被封禁，也不要把未知库存改为有货/无货。

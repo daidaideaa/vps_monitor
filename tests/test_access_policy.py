@@ -116,6 +116,30 @@ class ObservationTest(unittest.TestCase):
         self.assertNotIn('password', json.dumps(diag))
 
 
+class ChallengeSignalsTest(unittest.TestCase):
+    def test_script_failure_is_distinct_from_expected_pat_and_dns_probes(self):
+        signals = policy.ChallengeSignals('https://app.vmiss.com/store')
+        signals.response(SimpleNamespace(url='https://app.vmiss.com/cdn-cgi/challenge-platform/pat/private?token=secret', status=401))
+        signals.failed(SimpleNamespace(url='https://random.challenges.cloudflare.com/private', failure='net::ERR_NAME_NOT_RESOLVED'))
+        signals.failed(SimpleNamespace(url='https://challenges.cloudflare.com/turnstile/private?cookie=secret', failure='net::ERR_NAME_NOT_RESOLVED'))
+        signals.console(SimpleNamespace(text='[Cloudflare Turnstile] Error: 300030. private secret'))
+        signals.response(SimpleNamespace(url='https://unrelated.example/private', status=500))
+        self.assertEqual(signals.snapshot(), {'events': {
+            'pat_http_401': 1, 'nonfatal_dns_probe_failed_dns': 1,
+            'challenge_failed_dns': 1}, 'error_codes': ['300030']})
+        self.assertNotIn('secret', json.dumps(signals.snapshot()))
+        self.assertNotIn('private', json.dumps(signals.snapshot()))
+
+    def test_counters_are_bounded_and_do_not_turn_challenge_into_stock(self):
+        signals = policy.ChallengeSignals('https://app.vmiss.com/store')
+        for status in range(100, 600):
+            signals.response(SimpleNamespace(url='https://challenges.cloudflare.com/test', status=status))
+        self.assertEqual(len(signals.snapshot()['events']), 32)
+        for _ in range(1000):
+            signals.response(SimpleNamespace(url='https://challenges.cloudflare.com/test', status=100))
+        self.assertEqual(signals.snapshot()['events']['challenge_http_100'], 999)
+
+
 class BackoffTest(unittest.TestCase):
     def test_restart_escalation_and_confirmed_recovery(self):
         state = {}
