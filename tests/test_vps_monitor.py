@@ -132,7 +132,7 @@ class StateTest(unittest.TestCase):
         self.assertEqual([p['provider'] for p in result['products']], ['VMISS', 'ZgoCloud', 'RFCHOST', 'V.PS', 'V.PS'])
         self.assertEqual([p['status'] for p in result['products']], ['unknown'] * 5)
         self.assertTrue(all(p['check_interval_seconds'] == 600 for p in result['products']))
-        self.assertTrue(all(p['query_location'] == 'hong-kong-vps' for p in result['products']))
+        self.assertTrue(all(p['query_location'] == 'japan-home-vps' for p in result['products']))
         self.assertEqual(result['products'][2]['last_available_at'], old['last_checked'])
         self.assertIsNone(result['products'][2]['stock'])
         self.assertNotIn('secret-', json.dumps(result))

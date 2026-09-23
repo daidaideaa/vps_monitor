@@ -28,7 +28,7 @@ LOG = logging.getLogger("vmiss")
 STATUSES = {"available", "unavailable", "unknown"}
 SECRET_KEYS = ("SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM", "MAIL_TO")
 OUT = re.compile(r"\b(?:out\s+of\s+stock|sold\s+out)\b|缺货|售罄|暂无库存|库存不足", re.I)
-COUNTS = re.compile(r"(?<![\w.,+\-])(\d+)\s+Available\b", re.I)
+COUNTS = re.compile(r"(?<![\w.,+\-])(\d+)\s+(?:Available\b|可用)", re.I)
 BUY = re.compile(r"^(?:Order\s+Now|立即订购|现在订购)$", re.I)
 BLOCKED = re.compile(
     r"just a moment|verify (?:that )?you are human|access denied|checking your browser|"
@@ -142,8 +142,8 @@ def parse_region(text, buttons=()):
     if out or zero:
         return Result("unavailable", (out or zero).group(), "explicit_unavailable")
     # 不把 -1、1.5、1,000 或库存数字冲突误当作正整数；有歧义不退回按钮。
-    if re.search(r"\bAvailable\b", text, re.I):
-        if len(counts) == 1 and len(re.findall(r"\bAvailable\b", text, re.I)) == 1:
+    if re.search(r"\bAvailable\b|可用", text, re.I):
+        if len(counts) == 1 and len(re.findall(r"\bAvailable\b|可用", text, re.I)) == 1:
             return Result("available", counts[0].group(), "positive_count")
         return Result(evidence="Ambiguous or invalid stock count", rule="ambiguous_count")
     for button in buttons:
@@ -235,20 +235,32 @@ def check_stock(cfg, screenshot_unknown=False):
                 context = browser.new_context(locale="zh-CN", timezone_id=cfg.timezone)
                 page = context.new_page()
                 page.set_default_timeout(cfg.timeout_ms)
-                response = page.goto(cfg.product_url, wait_until="load", timeout=cfg.timeout_ms)
+                document = {}
+                def observed(response):
+                    if response.request.is_navigation_request() and response.frame == page.main_frame:
+                        document.update(status=response.status, headers=response.headers)
+                page.on('response', observed)
+                deadline = time.monotonic() + cfg.timeout_ms / 1000
+                response = page.goto(cfg.product_url, wait_until="domcontentloaded", timeout=cfg.timeout_ms)
+                document.setdefault('status', response.status if response else None)
                 expected = urlsplit(cfg.product_url)
                 actual = urlsplit(page.url)
                 if (actual.scheme, actual.netloc, actual.path.rstrip('/')) != (expected.scheme, expected.netloc, expected.path.rstrip('/')):
                     return Result(evidence="Unexpected page redirect", rule="redirect")
-                deadline = time.monotonic() + cfg.timeout_ms / 1000
                 previous = None
                 # 同一次访问两次一致观测，避免加载途中按钮先出现造成误报。
                 while True:
-                    result = inspect_page(page, cfg.product_name, response.status if response else None)
+                    actual = urlsplit(page.url)
+                    if (actual.scheme, actual.netloc, actual.path.rstrip('/')) != (expected.scheme, expected.netloc, expected.path.rstrip('/')):
+                        return Result(evidence="Unexpected page redirect", rule="redirect")
+                    if document.get('headers', {}).get('cf-mitigated') == 'challenge':
+                        result = Result(evidence="Cloudflare challenge", rule="blocked")
+                    else:
+                        result = inspect_page(page, cfg.product_name, document['status'])
                     signature = (result.status, result.evidence, result.snippet)
                     if result.status != "unknown" and signature == previous:
                         break
-                    if result.rule in ("http_error", "blocked") or time.monotonic() >= deadline:
+                    if time.monotonic() >= deadline:
                         if result.status != "unknown":
                             result = Result(evidence="Product did not stabilize", rule="unstable")
                         break

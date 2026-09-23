@@ -8,6 +8,8 @@ import sys
 import time
 import socket
 import subprocess
+import select
+from contextlib import contextmanager
 from datetime import datetime, timezone, timedelta
 from email.message import EmailMessage
 from email.utils import format_datetime, make_msgid
@@ -263,8 +265,8 @@ def check_http(target, proxy_url=None):
             if len(body) > MAX_HTML:
                 return unknown('商家页面过大，未解析')
             html = body.decode(response.headers.get_content_charset() or 'utf-8', errors='replace')
-            if '/cdn-cgi/challenge-platform' in html:
-                return unknown('Cloudflare 后台验证需由浏览器执行并确认')
+            # The parser distinguishes normal background JSD from a challenge.
+            # A clearance cookie is not required for an ordinary HTTP 200 catalog.
             return parse_stock(html, target['provider'], target)
     except Exception:
         return unknown('商家请求失败、超时或要求验证')
@@ -308,10 +310,6 @@ def check_browser(target, proxy_url=None):
                         if len(html.encode('utf-8')) > MAX_HTML:
                             return unknown('商家页面过大，未解析')
                         result = parse_stock(html, target['provider'], target)
-                        if '/cdn-cgi/challenge-platform' in html and not any(
-                                c['name'] == 'cf_clearance' and c.get('expires', 0) > time.time()
-                                for c in browser.cookies([target['product_url']])):
-                            result = unknown('Cloudflare 验证会话尚未确认，不能采用库存结果')
                         if result['status'] != 'unknown' and result == previous:
                             return result
                         previous = result
@@ -329,14 +327,45 @@ def check_browser(target, proxy_url=None):
         return unknown('浏览器检查失败、超时或要求验证')
 
 
+@contextmanager
+def virtual_display():
+    """Own the temporary X display; independent of the VMISS engine version."""
+    if os.environ.get('DISPLAY'):
+        yield
+        return
+    read_fd, write_fd = os.pipe()
+    display = None
+    try:
+        display = subprocess.Popen(['Xvfb', '-displayfd', str(write_fd), '-screen', '0', '1280x900x24', '-nolisten', 'tcp'],
+                                   pass_fds=(write_fd,), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        os.close(write_fd)
+        write_fd = None
+        if not select.select([read_fd], [], [], 5)[0]:
+            raise TimeoutError('Virtual display startup timeout')
+        number = os.read(read_fd, 32).decode('ascii').strip()
+        if not number.isdecimal():
+            raise RuntimeError('Virtual display did not start')
+        os.environ['DISPLAY'] = ':' + number
+        yield
+    finally:
+        os.close(read_fd)
+        if write_fd is not None:
+            os.close(write_fd)
+        os.environ.pop('DISPLAY', None)
+        if display is not None:
+            display.terminate()
+            try:
+                display.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                display.kill()
+                display.wait(timeout=2)
+
+
 def check_rfchost_browser(target, proxy_url=None):
     """Normal Chromium on a VPS virtual display; let site verification run normally."""
     native = browser = None
     try:
         from playwright.sync_api import sync_playwright
-        if str(VMISS_MONITOR) not in sys.path:
-            sys.path.insert(0, str(VMISS_MONITOR))
-        from monitor import virtual_display
         profile = STATE.parent / 'browser-profiles' / (target['id'] + ('-japan' if proxy_url else ''))
         profile.mkdir(parents=True, exist_ok=True, mode=0o700)
         with virtual_display(), sync_playwright() as playwright:
@@ -349,54 +378,63 @@ def check_rfchost_browser(target, proxy_url=None):
                 '--no-first-run', '--no-default-browser-check', '--disable-background-networking',
                 '--disable-extensions', '--disable-sync', '--window-size=1280,900',
                 '--remote-debugging-address=127.0.0.1', f'--remote-debugging-port={port}',
-                f'--user-data-dir={profile}', *([f'--proxy-server={proxy_url}'] if proxy_url else []), target['product_url'],
+                f'--user-data-dir={profile}', *([f'--proxy-server={proxy_url}'] if proxy_url else []), 'about:blank',
             ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             try:
                 ready = False
                 deadline = time.monotonic() + 40
+                control = build_opener(ProxyHandler({}))
                 while time.monotonic() < deadline and native.poll() is None:
                     try:
                         # Loopback control endpoint only; no merchant scraping here.
-                        with urlopen(endpoint + '/json/list', timeout=2) as response:
+                        with control.open(endpoint + '/json/list', timeout=2) as response:
                             tabs = json.load(response)
-                        ready = any(t.get('type') == 'page' and allowed_url(t.get('url', ''), target)
-                                    and 'RFCHOST' in t.get('title', '') for t in tabs)
+                        ready = any(t.get('type') == 'page' for t in tabs)
                         if ready:
                             break
                     except (OSError, ValueError):
                         pass
                     time.sleep(2)
                 if not ready:
-                    return unknown('Cloudflare 验证仍未完成，无法读取 RFCHOST 库存')
+                    return unknown('RFCHOST 浏览器启动超时')
                 browser = playwright.chromium.connect_over_cdp(endpoint, timeout=10000)
                 context = browser.contexts[0]
-                pages = [p for p in context.pages if allowed_url(p.url, target)]
-                if not pages:
-                    return unknown('RFCHOST 目标页面缺失')
-                page = pages[-1]
+                page = context.pages[0] if context.pages else context.new_page()
                 for extra in context.pages:
                     if extra != page:
                         extra.close()
-                # Do not trust a restored tab or a verification title as stock evidence.
-                response = page.goto(target['product_url'], wait_until='domcontentloaded', timeout=20000)
-                if (response is None or response.status != 200 or not allowed_url(page.url, target)
-                        or response.headers.get('cf-mitigated') == 'challenge'
-                        or response.headers.get('content-range')
-                        or not re.match(r'^(text/html|application/xhtml\+xml)\b', response.headers.get('content-type', ''), re.I)):
-                    return unknown('Cloudflare / HTTP 403 或 RFCHOST 页面响应异常')
-                html = page.content()
-                if len(html.encode('utf-8')) > MAX_HTML:
-                    return unknown('RFCHOST 页面过大')
-                result = parse_stock(html, target['provider'], target)
-                if '/cdn-cgi/challenge-platform' in html and not any(
-                        c['name'] == 'cf_clearance' and c.get('expires', 0) > time.time()
-                        for c in context.cookies([target['product_url']])):
-                    return unknown('Cloudflare 验证会话尚未确认，不能采用库存结果')
-                page.wait_for_timeout(1500)
-                again = parse_stock(page.content(), target['provider'], target)
-                if allowed_url(page.url, target) and result == again and result['status'] != 'unknown':
-                    return result
-                return unknown('RFCHOST 目标库存未稳定显示')
+                # Observe the first visit and any normal verification navigation.
+                # Never reload a page just because its challenge has completed.
+                document = {}
+                def observed(response):
+                    if response.request.is_navigation_request() and response.frame == page.main_frame:
+                        document.update(code=response.status, headers=response.headers)
+                page.on('response', observed)
+                page.set_default_timeout(3000)
+                deadline = time.monotonic() + 40
+                page.goto(target['product_url'], wait_until='domcontentloaded', timeout=20000)
+                previous = None
+                result = unknown('Cloudflare 验证仍未完成，无法读取 RFCHOST 库存')
+                while time.monotonic() < deadline:
+                    headers = document.get('headers', {})
+                    if not allowed_url(page.url, target):
+                        return unknown('浏览器离开 RFCHOST 目标页面')
+                    if document.get('code') == 200 and headers.get('cf-mitigated') != 'challenge':
+                        if (headers.get('content-range') or not re.match(
+                                r'^(text/html|application/xhtml\+xml)\b', headers.get('content-type', ''), re.I)):
+                            return unknown('RFCHOST 页面响应格式异常')
+                        html = page.content()
+                        if len(html.encode('utf-8')) > MAX_HTML:
+                            return unknown('RFCHOST 页面过大')
+                        result = parse_stock(html, target['provider'], target)
+                        if result['status'] != 'unknown' and result == previous:
+                            return result
+                        previous = result
+                    else:
+                        previous = None
+                        result = unknown('Cloudflare 验证 / HTTP ' + str(document.get('code')))
+                    page.wait_for_timeout(1500)
+                return unknown(result.get('explanation', 'RFCHOST 目标库存未稳定显示'))
             finally:
                 if browser:
                     try:
@@ -418,14 +456,6 @@ def check_rfchost_browser(target, proxy_url=None):
         return unknown('RFCHOST 浏览器检查失败或超时')
 
 
-def check_japan(target):
-    proxy = os.environ.get('JAPAN_PROXY_URL', '')
-    if not proxy:
-        return unknown('日本备用出口未配置')
-    result = check_http(target, proxy)
-    return check_browser(target, proxy) if result['status'] == 'unknown' else result
-
-
 def update_product(target, result, previous, checked):
     previous = previous if isinstance(previous, dict) else {}
     if previous.get('product_url') != target['product_url']:
@@ -444,7 +474,7 @@ def update_product(target, result, previous, checked):
                'last_checked': checked, 'unknown_count': errors + 1 if status == 'unknown' else 0,
                'last_unknown_reason': result.get('explanation', '') if status == 'unknown' else '',
                'check_interval_seconds': INTERVAL,
-               'query_location': result.get('query_location', os.environ.get('QUERY_LOCATION', 'hong-kong-vps'))}
+               'query_location': 'japan-home-vps'}
     product['stock_notified'] = False if status == 'unavailable' else previous.get('stock_notified') is True
     product['error_notified'] = previous.get('error_notified') is True if status == 'unknown' else False
     product['baseline_required'] = previous.get('baseline_required') is True
@@ -455,7 +485,7 @@ def update_product(target, result, previous, checked):
     return product
 
 
-def run_once(output=STATE, http_check=check_http, browser_check=check_browser, sender=None, error_after=10, fallback_check=None):
+def run_once(output=STATE, http_check=check_http, browser_check=check_browser, sender=None, error_after=10):
     state = _read_json(output)
     corrupt = output.exists() and (state is None or not isinstance(state.get('products'), list))
     if state and not corrupt:
@@ -480,10 +510,6 @@ def run_once(output=STATE, http_check=check_http, browser_check=check_browser, s
         if result['status'] == 'unknown':
             result = browser_check(target)
             method = 'playwright'
-        if result['status'] == 'unknown' and fallback_check:
-            LOG.info('%s Hong Kong unknown; checking via Japan VPS', target['id'])
-            result = {**fallback_check(target), 'query_location': 'japan-vps-egress'}
-            method = 'japan-fallback'
         checked = datetime.now(timezone.utc).isoformat()
         old = previous.get(target['id'])
         product = update_product(target, result, old, checked)
@@ -511,7 +537,8 @@ if __name__ == '__main__':
         message.set_content('This is a configuration test, not a stock alert.\n'
                             'Stock alerts are enabled for VMISS, ZgoCloud, RFCHOST, and V.PS Tokyo Starter / Essential.\n')
         try:
-            send(config, message)
+            if not send(config, str(message['Subject']), message.get_content()):
+                raise RuntimeError('SMTP delivery failed')
         except Exception as exc:
             LOG.error('Test email failed (%s)', type(exc).__name__)
             sys.exit(1)
@@ -522,5 +549,4 @@ if __name__ == '__main__':
     STATE.parent.mkdir(parents=True, exist_ok=True)
     with STATE.with_suffix('.lock').open('w') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        run_once(sender=send_alert, error_after=config.error_alert_after,
-                 fallback_check=check_japan if os.environ.get('JAPAN_PROXY_URL') else None)
+        run_once(sender=send_alert, error_after=config.error_after)

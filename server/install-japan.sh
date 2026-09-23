@@ -11,7 +11,7 @@ check() {
   test -f /etc/vps-status-publisher.env
   id vmiss-monitor >/dev/null
   "$python" -c 'import ast,pathlib; [ast.parse(p.read_text()) for p in list(pathlib.Path(".").glob("*.py"))+[pathlib.Path("../vmiss-stock-monitor/monitor.py")]]; import dotenv,playwright'
-  VMISS_MONITOR_ROOT="$(cd ../vmiss-stock-monitor && pwd)" "$python" -c 'import run_japan_cycle; from vps_stock_monitor import mail_config; assert callable(run_japan_cycle.monitor.check_stock); assert hasattr(run_japan_cycle.monitor.Config(), "error_after")'
+  VMISS_MONITOR_ROOT="$(cd ../vmiss-stock-monitor && pwd)" "$python" -c 'import run_japan_cycle; from vps_stock_monitor import mail_config, virtual_display; assert callable(virtual_display); assert callable(run_japan_cycle.monitor.check_stock); assert hasattr(run_japan_cycle.monitor.Config(), "error_after")'
   systemd-analyze verify vps-stock-japan.service vps-status-publish.service
 }
 verify() {
@@ -22,14 +22,21 @@ if [[ "$mode" == --verify ]]; then verify; exit; fi
 check
 if [[ "$mode" == --validate ]]; then echo 'Deployment validation passed; no changes applied.'; exit; fi
 test "$(id -u)" = 0
-if systemctl is-active --quiet vps-stock-japan.service; then echo 'A stock check is running; apply after it finishes.' >&2; exit 1; fi
+case "$(systemctl show -p ActiveState --value vps-stock-japan.service)" in
+  active|activating|deactivating|reloading) echo 'A stock check is running; apply after it finishes.' >&2; exit 1;;
+esac
 backup=$(mktemp -d /opt/vmiss-stock-monitor/repo-split-backup.XXXXXX)
 chmod 700 "$backup"
 files=(/opt/vmiss-stock-monitor/monitor.py /opt/vmiss-stock-monitor/requirements.txt)
 for name in stock_targets.py export_status.py vps_stock_monitor.py run_japan_cycle.py publish_status.py; do files+=("/opt/vmiss-public-status/$name"); done
 for name in vps-stock-japan.service vps-stock-japan.timer vps-status-publish.service vps-status-publish.timer; do files+=("/etc/systemd/system/$name"); done
 for path in "${files[@]}"; do
-  if [[ -f "$path" ]]; then cp --parents -p "$path" "$backup"; else printf '%s\n' "$path" >> "$backup/new-paths"; fi
+  if [[ -f "$path" ]]; then
+    mkdir -p -- "$backup$(dirname -- "$path")"
+    cp -p -- "$path" "$backup$path"
+  else
+    printf '%s\n' "$path" >> "$backup/new-paths"
+  fi
 done
 rollback() {
   for prefix in opt etc; do [[ ! -d "$backup/$prefix" ]] || cp -a "$backup/$prefix/." "/$prefix/"; done

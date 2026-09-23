@@ -8,7 +8,7 @@
 | --- | --- |
 | VMISS JP.TKY.TRI.Basic | 完整 Chromium Headless；挑战页保守返回 unknown |
 | ZgoCloud Tokyo Intel VPS · Starter | HTTP，无法确认时使用 Chromium |
-| RFCHOST JP2-CO-Micro-Lite | Chromium + Xvfb，等待正常验证后严格解析 |
+| RFCHOST JP2-CO-Micro-Lite | HTTP 优先；无法确认时 Chromium + Xvfb，一次访问等待正常验证 |
 | V.PS Tokyo Cloud KVM · Starter | 官方订购页，套餐编号 148 |
 | V.PS Tokyo Cloud KVM · Essential | 官方订购页，套餐编号 149 |
 
@@ -31,7 +31,7 @@
 - status-gateway/：仅保存公开快照的 Cloudflare Worker。
 - tests/：解析、邮件、历史、上传与网页测试。
 
-VMISS 主程序来自独立项目 vmiss-stock-monitor/monitor.py，部署到 /opt/vmiss-stock-monitor/。本仓库不保存密码、上传令牌、浏览器会话或实际运行状态。旧香港部署文件仅作历史参考，不要同时启用旧监控。旧 worker/ 和 RFCHOST GitHub Actions 均没有自动检查计划。
+VMISS 主程序来自独立项目 vmiss-stock-monitor/monitor.py，部署到 /opt/vmiss-stock-monitor/。本仓库不保存密码、上传令牌、浏览器会话或实际运行状态。香港 VPS 已过期，旧香港安装脚本、备用代理、重复 Cloudflare 检查器及其独立探测 workflow 已删除；生产只保留日本家宽检查和 status-gateway 状态发布。历史记录中的原始来源标签保留，避免冒充新观测。
 
 ## 日本端安装：Debian 12 / 13
 
@@ -110,6 +110,8 @@ curl -fsS https://jp-vps-status.jp-home-subscription.workers.dev/status.json
 
 验证页面、403、访问失败、套餐边界不明或库存冲突均返回 unknown。RFCHOST 等待正常 Chromium 验证，不点击验证码或调用第三方解题服务；正常后台验证脚本与整页拦截分别处理，只有正常响应和稳定库存解析才采用结果。商家策略可能变化，不能保证永久放行。
 
+VMISS 同时识别英文 `0 Available` 和中文 `0 可用`，显式零库存优先于订购按钮。浏览器检查跟踪正常验证后的导航响应，不重复刷新；RFCHOST 正常 HTTP 200 商品页中的后台 JSD 脚本不要求额外的 clearance cookie。实际挑战页、HTTP 403 和解析歧义仍返回 unknown，不能用桌面浏览器的结果冒充日本 VPS 观测。
+
 V.PS 严格核对 Tokyo 选中位置、148/149 编号、对应标题及订单控件，其它套餐有货不能替代目标。公开数据不含邮箱、密码、cookies、HTML 或原始错误详情。
 
 ## 维护与测试
@@ -134,3 +136,5 @@ node --test tests/frontend.test.cjs tests/gateway.test.mjs
 节点部署、SSH、订阅及链路诊断由 [vps_build](https://github.com/daidaideaa/vps_build) 管理；本仓库负责库存、浏览器、邮件、状态页面、Cloudflare 状态接口及 systemd 定时器。两者独立检出为相邻目录。旧监控代码的有用历史保留在 Git 历史和本地 `.local/legacy-vmiss-stock-monitor/`；私密会话与状态不移动、不覆盖。
 
 `run_japan_cycle.py` 使用 `check_stock` 与新版 Config/Result/邮件接口；`process_result`、`single_instance` 仍存在于本仓库当前版本。旧 `monitored_check` 不再是部署依赖。新版不复用旧持久浏览器会话恢复；遇验证页返回 unknown，不冒充库存已确认。升级可用安装脚本给出的私有备份恢复代码和 unit。
+
+GitHub 的专用 SSH 密钥保存在 `vps_build` 的 `vps-production` Environment；固定 `deploy` 操作只运行本仓库 `server/deploy-approved.sh`，应用 root 预先放置的 `/opt/vps-monitor-approved`。该账户无任意命令、文件上传或通用 sudo 权限。源代码由管理员审核后更新批准目录；运行中的库存检查和 VPN 不会被部署强制中断。

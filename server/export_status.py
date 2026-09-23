@@ -28,6 +28,8 @@ def _explanation(errors, reason, confirmed):
     lowered = str(reason or '').lower()
     if errors and ('cloudflare' in lowered or '403' in lowered):
         return '网站验证或 HTTP 403，本轮无法确认库存'
+    if errors and any(word in lowered for word in ('timeout', 'exceeded', '超时', 'browser unavailable')):
+        return '浏览器启动或读取超时，本轮无法确认库存'
     if errors:
         return '本轮未能可靠读取目标套餐，请等待下一次检查'
     if confirmed == 'available':
@@ -66,7 +68,7 @@ def _public_product(state, provider, product_id, interval=INTERVAL):
         'stock': stock,
         'explanation': _explanation(errors, state.get('last_unknown_reason'), confirmed),
         'check_interval_seconds': max(30, int(interval)),
-        'query_location': state.get('query_location') if state.get('query_location') in {'hong-kong-vps', 'japan-vps-egress', 'japan-home-vps'} else os.environ.get('QUERY_LOCATION', 'hong-kong-vps'),
+        'query_location': state.get('query_location') if state.get('query_location') in {'hong-kong-vps', 'japan-vps-egress', 'japan-home-vps'} else 'japan-home-vps',
         'check_interval_min_seconds': 480,
         'check_interval_max_seconds': 720,
     }
@@ -147,7 +149,7 @@ def combined_snapshot(vmiss_state, other_state=None, interval=INTERVAL, previous
         # The checker persists history even if the exporter skips intermediate checks.
         public.update(_inventory_history(public, {**state, **target}))
         products.append(public)
-    return {'schema_version': 2, 'query_location': os.environ.get('QUERY_LOCATION', 'hong-kong-vps'),
+    return {'schema_version': 2, 'query_location': 'japan-home-vps',
             'products': products, 'published_at': datetime.now(timezone.utc).isoformat()}
 
 

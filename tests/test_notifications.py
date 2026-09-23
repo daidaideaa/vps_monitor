@@ -11,18 +11,18 @@ from vps_stock_monitor import make_alert, notify_product, run_once, update_produ
 
 
 class NotificationTest(unittest.TestCase):
-    def test_japan_only_after_unknown_and_its_confirmation_can_notify(self):
-        fallback_calls, sent = [], []
-        def hk(t):
+    def test_browser_only_after_unknown_and_its_confirmation_can_notify(self):
+        browser_calls, sent = [], []
+        def http(t):
             return {'status': 'unknown' if t == TARGETS[1] else 'unavailable', 'stock': 0}
-        def jp(t):
-            fallback_calls.append(t['id'])
+        def browser(t):
+            browser_calls.append(t['id'])
             return {'status': 'available', 'stock': 2}
         with tempfile.TemporaryDirectory() as d:
-            data = run_once(Path(d) / 'state.json', hk, hk, lambda p, e: sent.append((p['id'], e)), fallback_check=jp)
-        self.assertEqual(fallback_calls, [TARGETS[1]['id']])
+            data = run_once(Path(d) / 'state.json', http, browser, lambda p, e: sent.append((p['id'], e)))
+        self.assertEqual(browser_calls, [TARGETS[1]['id']])
         self.assertEqual(sent, [(TARGETS[1]['id'], 'stock')])
-        self.assertEqual(data['products'][1]['query_location'], 'japan-vps-egress')
+        self.assertEqual(data['products'][1]['query_location'], 'japan-home-vps')
 
     def test_unknown_does_not_reset_unavailable_episode(self):
         first = update_product(TARGETS[0], {'status': 'unavailable'}, None, '2026-09-21T12:00:00Z')
