@@ -2,13 +2,17 @@
 const headers = {'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff'};
 const targets = new Map([
   ['vmiss-jp-tky-tri-basic', 'app.vmiss.com'], ['zgocloud-tokyo-intel-starter', 'clients.zgovps.com'],
-  ['rfchost-jp2-co-micro-lite', 'my.rfchost.com'], ['vps-tokyo-cloud-starter', 'vps.hosting'], ['vps-tokyo-cloud-essential', 'vps.hosting'],
+  ['rfchost-jp2-co-micro-lite', 'my.rfchost.com'],
 ]);
+// Accept an old publisher during deployment, but never expose retired products.
+const retired = new Set(['vps-tokyo-cloud-starter', 'vps-tokyo-cloud-essential']);
 const fields = ['id', 'provider', 'product_name', 'product_url', 'status', 'last_confirmed', 'last_checked', 'unknown_count', 'stock', 'explanation', 'check_interval_seconds', 'query_location', 'check_interval_min_seconds', 'check_interval_max_seconds', 'last_available_at', 'unavailable_since'];
 export function publicSnapshot(data) {
-  if (data?.schema_version !== 2 || data.query_location !== 'japan-home-vps' || !Array.isArray(data.products) || data.products.length !== 5 || !Number.isFinite(Date.parse(data.published_at)) || Date.parse(data.published_at) > Date.now()+120000) throw Error('Invalid snapshot');
+  if (data?.schema_version !== 2 || data.query_location !== 'japan-home-vps' || !Array.isArray(data.products) || data.products.length > targets.size + retired.size || !Number.isFinite(Date.parse(data.published_at)) || Date.parse(data.published_at) > Date.now()+120000) throw Error('Invalid snapshot');
+  const active = data.products.filter(p => !retired.has(p?.id));
+  if (active.length !== targets.size) throw Error('Missing active product');
   const ids = new Set();
-  const products = data.products.map(p => {
+  const products = active.map(p => {
     if (!targets.has(p.id) || ids.has(p.id) || !['available','unavailable','unknown'].includes(p.status)) throw Error('Invalid product');
     const url = new URL(p.product_url);
     if (url.protocol !== 'https:' || url.host !== targets.get(p.id) || url.username || url.password) throw Error('Invalid store URL');
@@ -28,7 +32,9 @@ export class StatusSnapshot {
       await this.state.storage.put('latest',data);
       return new Response(null,{status:204});
     }
-    const data = await this.state.storage.get('latest');
+    const stored = await this.state.storage.get('latest');
+    let data;
+    try { data = stored && publicSnapshot(stored); } catch { data = null; }
     return new Response(JSON.stringify(data || {error:'Japan has not published a snapshot'}),{status:data?200:503,headers});
   }
 }

@@ -28,30 +28,22 @@ const snapshot = () => ({ schema_version: 2, products: [
   { id: 'vps-tokyo-cloud-starter', provider: 'V.PS', status: 'available', last_confirmed: 'available', last_checked: checked(), check_interval_seconds: 300 },
 ] });
 
-test('一次刷新只读 VPS API，四张卡片展示五个独立套餐', async () => {
+test('一次刷新只读 VPS API，三张卡片展示三个独立套餐', async () => {
   const urls = [];
   const p = page(async url => { urls.push(url); return Response.json(snapshot()); });
   await p.run('load()');
   assert.deepEqual(urls, ['https://jp-vps-status.jp-home-subscription.workers.dev/status.json']);
-  assert.deepEqual(p.states(), ['available','unavailable','unavailable','available','unavailable']);
-  assert.equal(p.nodes.cards.children.length, 4);
-  assert.equal(p.run("latest.map(p=>p.provider).join(',')"), 'VMISS,ZgoCloud,RFCHOST,V.PS,V.PS');
+  assert.deepEqual(p.states(), ['available','unavailable','unavailable']);
+  assert.equal(p.nodes.cards.children.length, 3);
+  assert.equal(p.run("latest.map(p=>p.provider).join(',')"), 'VMISS,ZgoCloud,RFCHOST');
 });
 
-test('V.PS 合并展示但状态、链接、历史与待确认统计相互独立', async () => {
-  const data = snapshot();
-  data.products[3] = {...data.products[3],status:'unknown',unknown_count:1,unavailable_since:new Date(Date.now()-3600000).toISOString()};
-  const p = page(async () => Response.json(data)); await p.run('load()');
-  assert.deepEqual(p.states().slice(3), ['available','unknown']);
-  const group = p.nodes.cards.children[3];
-  const visit = node => [node, ...node.children.flatMap(visit)];
-  const all = visit(group);
-  assert.deepEqual(all.filter(node=>node.href).map(node=>node.href),[
-    'https://vps.hosting/?action=add&cmd=cart&id=148',
-    'https://vps.hosting/?action=add&cmd=cart&id=149'
-  ]);
-  assert.match(p.text(), /当前待确认/);
-  assert.equal(visit(p.nodes.overview).map(node=>node.textContent).join(''), '2 个套餐有货2 有货 / 2 无货 / 1 待确认');
+test('旧快照中的 V.PS 不再显示或计入统计', async () => {
+  const p = page(async () => Response.json(snapshot())); await p.run('load()');
+  assert.equal(p.nodes.cards.children.length, 3);
+  assert.equal(p.text().includes('V.PS'), false);
+  const visit = node => [node.textContent, ...node.children.flatMap(visit)];
+  assert.equal(visit(p.nodes.overview).join(''), '1 个套餐有货1 有货 / 2 无货 / 0 待确认');
 });
 
 test('页面同步时间独立于商家实际检查时间，失败不显示同步成功', async () => {
@@ -66,14 +58,14 @@ test('页面同步时间独立于商家实际检查时间，失败不显示同�
   assert.equal(p.nodes.refresh.textContent, '同步失败，稍后重试');
 });
 
-test('VPS 断连保留历史但五个套餐均为 offline，恢复后解除离线', async () => {
+test('VPS 断连保留历史但三个套餐均为 offline，恢复后解除离线', async () => {
   let failed = false;
   const p = page(async () => { if (failed) throw new Error('network'); return Response.json(snapshot()); });
   await p.run('load()'); failed = true; await p.run('load()');
-  assert.deepEqual(p.states(), ['offline','offline','offline','offline','offline']);
+  assert.deepEqual(p.states(), ['offline','offline','offline']);
   assert.equal(p.run('latest[0].last_confirmed'), 'available');
   failed = false; await p.run('load()');
-  assert.deepEqual(p.states(), ['available','unavailable','unavailable','available','unavailable']);
+  assert.deepEqual(p.states(), ['available','unavailable','unavailable']);
 });
 
 test('单商家 unknown、缺失或过期不污染其它商家的结果', async () => {
@@ -81,24 +73,24 @@ test('单商家 unknown、缺失或过期不污染其它商家的结果', async 
   data.products[0] = {...data.products[0], status:'unknown', last_confirmed:'available', stock:3, unknown_count:1};
   const p = page(async () => Response.json(data));
   await p.run('load()');
-  assert.deepEqual(p.states(), ['available','unavailable','unknown','available','unavailable']);
+  assert.deepEqual(p.states(), ['available','unavailable','unknown']);
   assert.equal(p.run('latest[2].stock'), null);
   data.products.splice(2,1); await p.run('load()');
-  assert.deepEqual(p.states(), ['available','offline','unknown','available','unavailable']);
+  assert.deepEqual(p.states(), ['available','offline','unknown']);
   data.products[0].last_checked = '2020-01-01T00:00:00Z'; await p.run('load()');
-  assert.deepEqual(p.states(), ['available','offline','stale','available','unavailable']);
+  assert.deepEqual(p.states(), ['available','offline','stale']);
 });
 
 test('旧单产品 API 只展示 VMISS，不借用其它来源补造其它结果', async () => {
   const p = page(async () => Response.json({schema_version:1, ...snapshot().products[1]}));
   await p.run('load()');
-  assert.deepEqual(p.states(), ['available','offline','offline','offline','offline']);
+  assert.deepEqual(p.states(), ['available','offline','offline']);
 });
 
 test('重复 id 不会选择任意结果作为当前库存', async () => {
   const data = snapshot(); data.products.push({...data.products[0], status:'available', stock:2});
   const p = page(async () => Response.json(data)); await p.run('load()');
-  assert.deepEqual(p.states(), ['available','unavailable','offline','available','unavailable']);
+  assert.deepEqual(p.states(), ['available','unavailable','offline']);
 });
 
 test('540 秒边界与不同 interval 的 stale 语义', () => {
@@ -123,10 +115,10 @@ test('首次检查前 unknown，历史显示北京时间，unknown 或过期保�
   assert.equal(p.run("inventoryHistory({}, 'unavailable')[0][1]"), '尚无记录');
 });
 
-test('V.PS 套餐按唯一 ID 区分，允许官方购买链接，默认十分钟并随机抖动', () => {
+test('仅保留三个目标，拒绝退休商家链接，默认十分钟并随机抖动', () => {
   const p = page();
-  assert.equal(p.run('latest.length'), 5);
+  assert.equal(p.run('latest.length'), 3);
   assert.equal(p.run('latest.every(item => item.check_interval_seconds === 600)'), true);
-  assert.match(p.run('safeLink(targets[3].product_url)'), /vps\.hosting/);
+  assert.equal(p.run("safeLink('https://vps.hosting/')"), '#');
   assert.equal(p.run("productState({}).interval"), 600);
 });

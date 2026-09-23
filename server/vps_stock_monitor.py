@@ -1,4 +1,4 @@
-"""Query ZgoCloud/RFCHOST/V.PS on the VPS; no web-triggered checks or credentials."""
+"""Query ZgoCloud/RFCHOST on the VPS; no web-triggered checks or credentials."""
 import argparse
 import json
 import logging
@@ -138,69 +138,6 @@ class VisibleText(HTMLParser):
                     frame['text'].append(data)
 
 
-class VpsCards(VisibleText):
-    """Read HostBill product cards by ID and heading, including badges before titles."""
-    def __init__(self):
-        super().__init__()
-        self.cards = []
-        self.locations = []
-        self.order_enabled = False
-        self.challenge = False
-
-    def handle_starttag(self, tag, attrs):
-        before = len(self.stack)
-        super().handle_starttag(tag, attrs)
-        if len(self.stack) > before:
-            frame = self.stack[-1]
-            frame.update(attrs=dict(attrs), headings=[], visible_text=[])
-            if not frame['hidden'] and set(dict(attrs).get('class', '').split()) & {'g-recaptcha', 'cf-turnstile', 'h-captcha'}:
-                self.challenge = True
-
-    def handle_data(self, data):
-        super().handle_data(data)
-        if not any(f['hidden'] for f in self.stack):
-            for frame in self.stack:
-                frame['visible_text'].append(data)
-
-    def handle_endtag(self, tag):
-        frame = next((f for f in reversed(self.stack) if f['tag'] == tag), None)
-        if frame and not frame['hidden']:
-            text = ' '.join(' '.join(frame['visible_text']).split())
-            classes = set(frame['attrs'].get('class', '').split())
-            if tag == 'h4':
-                for parent in self.stack:
-                    if 'cart-product' in parent['attrs'].get('class', '').split():
-                        parent['headings'].append(text)
-            if 'cart-product' in classes:
-                self.cards.append({**frame['attrs'], 'headings': frame['headings'], 'text': text})
-            if {'cart-category', 'selected'} <= classes:
-                self.locations.append(text)
-            if (tag == 'button' and frame['order'] and text == 'Order'
-                    and 'submitOrder()' in frame['attrs'].get('onclick', '')
-                    and any(f['attrs'].get('id') == 'orderpage-summary' for f in self.stack)):
-                self.order_enabled = True
-        super().handle_endtag(tag)
-
-
-def parse_vps(html, target):
-    parser = VpsCards()
-    parser.feed(html)
-    if parser.challenge or parser.locations != ['Tokyo'] or not target:
-        return unknown()
-    matches = [c for c in parser.cards if c.get('data-value') == target.get('plan_id')]
-    if len(matches) != 1 or matches[0]['headings'] != [target.get('plan_name')]:
-        return unknown()
-    card = matches[0]
-    classes = set(card.get('class', '').split())
-    # Never infer stock from the marketing site's permanent Order links.
-    if 'outofstock' in classes or re.search(r'\b(?:Out\s+of\s+stock|Sold\s+out)\b', card['text'], re.I):
-        return {'status': 'unavailable', 'stock': 0}
-    selected = [c for c in parser.cards if 'selected' in c.get('class', '').split()]
-    if selected == [card] and parser.order_enabled and not classes & {'disabled', 'unavailable'}:
-        return {'status': 'available', 'stock': None}
-    return unknown()
-
-
 def parse_stock(html, provider, target=None):
     if not isinstance(html, str) or not re.search(r'<(?:html|body|div|h[1-6]|section|form)\b', html, re.I):
         return unknown()
@@ -209,15 +146,13 @@ def parse_stock(html, provider, target=None):
     # visible verification text and HTTP response guards remain mandatory.
     challenge_html = html.replace('/cdn-cgi/challenge-platform/scripts/jsd/main.js', '') if provider == 'RFCHOST' else html
     if (re.search(r'cf-chl-|/cdn-cgi/challenge-platform', challenge_html, re.I)
-            or (provider != 'V.PS' and re.search(r'g-recaptcha|h-captcha|cf-turnstile', html, re.I))):
+            or re.search(r'g-recaptcha|h-captcha|cf-turnstile', html, re.I)):
         return unknown('网站要求验证，本轮无法确认库存')
     parser = VisibleText()
     parser.feed(html)
     text = re.sub(r'\s+', ' ', ' '.join(parser.parts)).strip()
     if re.search(r'just a moment|checking your browser|performing security verification|verifying you are human|verify (?:that )?you are human|access denied|captcha|验证码|人机验证', text, re.I):
         return unknown('网站要求验证，本轮无法确认库存')
-    if provider == 'V.PS':
-        return parse_vps(html, target)
     if provider == 'ZgoCloud':
         if not re.search(r'\bTokyo Intel VPS\b', text):
             return unknown()
@@ -302,7 +237,7 @@ def inspect_browser(page, target):
 
 
 def browser_profile(target, proxy_url=None):
-    # Reuse existing RFCHOST/ZgoCloud paths; the two V.PS plans share one merchant.
+    # Reuse the existing RFCHOST/ZgoCloud private profile paths.
     merchant = next(t for t in TARGETS if t['provider'] == target['provider'])
     profile = STATE.parent / 'browser-profiles' / (merchant['id'] + ('-japan' if proxy_url else ''))
     profile.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -530,7 +465,7 @@ if __name__ == '__main__':
         message['From'], message['To'] = config.smtp_from, config.mail_to
         message['Subject'] = '[VPS Monitor] All-provider Email Test'
         message.set_content('This is a configuration test, not a stock alert.\n'
-                            'Stock alerts are enabled for VMISS, ZgoCloud, RFCHOST, and V.PS Tokyo Starter / Essential.\n')
+                            'Stock alerts are enabled for VMISS, ZgoCloud, and RFCHOST.\n')
         try:
             if not send(config, str(message['Subject']), message.get_content()):
                 raise RuntimeError('SMTP delivery failed')

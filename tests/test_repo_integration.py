@@ -53,9 +53,9 @@ class IntegrationTests(unittest.TestCase):
             page.evaluate.return_value = {'title': 'VMISS', 'body': '0 可用', 'challenge': False,
                                           'count': 1, 'text': '0 可用', 'buttons': ['立即订购']}
             def navigated(*args):
-                response = MagicMock(status=200, headers={'content-type': 'text/html'}, frame=page.main_frame)
+                response = MagicMock(status=200, url=cfg.product_url, headers={'content-type': 'text/html'}, frame=page.main_frame)
                 response.request.is_navigation_request.return_value = True
-                page.on.call_args.args[1](response)
+                next(c.args[1] for c in page.on.call_args_list if c.args[0] == 'response')(response)
             page.wait_for_timeout.side_effect = navigated
             result = monitor.check_stock(cfg)
             self.assertEqual(result.status, 'unavailable')
@@ -78,9 +78,9 @@ class IntegrationTests(unittest.TestCase):
             page.content.return_value = ('<div>JP2-CO-Micro-Lite 0 Available JP2-CO-Mini-Lite</div>'
                                          '<script src="/cdn-cgi/challenge-platform/scripts/jsd/main.js"></script>')
             def navigated(*args, **kwargs):
-                response = MagicMock(status=200, headers={'content-type': 'text/html'}, frame=page.main_frame)
+                response = MagicMock(status=200, url=target['product_url'], headers={'content-type': 'text/html'}, frame=page.main_frame)
                 response.request.is_navigation_request.return_value = True
-                page.on.call_args.args[1](response)
+                next(c.args[1] for c in page.on.call_args_list if c.args[0] == 'response')(response)
             page.goto.side_effect = navigated
             self.assertEqual(vps_stock_monitor.check_rfchost_browser(target)['status'], 'unavailable')
             page.goto.assert_called_once()
@@ -129,4 +129,3 @@ class IntegrationTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-

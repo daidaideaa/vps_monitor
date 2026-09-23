@@ -2,17 +2,15 @@
 
 独立的 Python VMISS 邮件监控见 [vmiss-stock-monitor/](vmiss-stock-monitor/README.md)，支持 Debian 12、systemd 和 GitHub 手动 SMTP 测试。日本端调度现在直接复用本仓库这一版本，不再依赖 vps_build 中的旧接口。
 
-[库存页面](https://daidaideaa.github.io/vps_monitor/)由 **JP-HOME-HY2（日本家宽 VPS）**独立检查四家商户的五个套餐并发送邮件。Windows 无需常开，运行链路不再依赖香港 VPS。
+[库存页面](https://daidaideaa.github.io/vps_monitor/)由 **JP-HOME-HY2（日本家宽 VPS）**独立检查三家商户的三个套餐并发送邮件。Windows 无需常开，运行链路不再依赖香港 VPS。
 
 | 套餐 | 检查方式 |
 | --- | --- |
 | VMISS JP.TKY.TRI.Basic | Chromium Headless 优先，固定持久 profile；挑战页返回 unknown |
 | ZgoCloud Tokyo Intel VPS · Starter | HTTP，无法确认时使用 Chromium |
 | RFCHOST JP2-CO-Micro-Lite | Chromium + Xvfb 优先，复用原 profile；一次访问等待正常验证 |
-| V.PS Tokyo Cloud KVM · Starter | 官方订购页，套餐编号 148 |
-| V.PS Tokyo Cloud KVM · Essential | 官方订购页，套餐编号 149 |
 
-五个套餐依次检查，避免浏览器同时占用内存。每轮开始间隔随机 480～720 秒（8～12 分钟），systemd 不会重叠执行。页面每 30 秒读取保存的结果，手动“同步结果”也不访问商家。各套餐的“实际检查”才是库存检测时间。
+三个套餐依次检查，避免浏览器同时占用内存。每轮开始间隔随机 480～720 秒（8～12 分钟），systemd 不会重叠执行。页面每 30 秒读取保存的结果，手动“同步结果”也不访问商家。各套餐的“实际检查”才是库存检测时间。
 
 日本 VPS 没有公网 HTTPS 入站端口，因此通过 HTTPS 将白名单公开状态上传到[状态接口](https://jp-vps-status.jp-home-subscription.workers.dev/status.json)。Cloudflare Worker 只保存和返回最后一份结果，不查询商家、不发送邮件、没有定时任务。日本检查的 query_location 为 japan-home-vps。上传失败保留旧结果并重试；旧检查时间不刷新，页面会标出过期记录。
 
@@ -21,9 +19,9 @@
 
 ## 结构
 
-- index.html：四张商户卡片，V.PS 两个套餐合并展示独立状态。
-- server/run_japan_cycle.py：日本端五套餐串行检查、邮件与持久化。
-- server/vps_stock_monitor.py、stock_targets.py：其余四套餐的检查和状态机。
+- index.html：三张商户卡片，分别展示 VMISS、ZgoCloud、RFCHOST。
+- server/run_japan_cycle.py：日本端三套餐串行检查、邮件与持久化。
+- server/vps_stock_monitor.py、stock_targets.py：其余两个套餐的检查和状态机。
 - server/export_status.py、publish_status.py：白名单导出和主动上传。
 - server/vps-stock-japan.*：8～12 分钟随机定时器与服务。
 - server/vps-status-publish.*：每 30 秒导出，结果改变才上传。
@@ -91,10 +89,10 @@ systemctl list-timers 'vps-*'
 curl -fsS https://jp-vps-status.jp-home-subscription.workers.dev/status.json
 ```
 
-正常迁移时，先停掉旧机的 VMISS 服务、四套餐检查定时器及服务、状态导出定时器及服务、日本备用代理，再复制以下三份最新状态并启用新端：
+正常迁移时，先停掉旧机的 VMISS 服务、库存检查定时器及服务、状态导出定时器及服务、日本备用代理，再复制以下三份最新状态并启用新端：
 
 - /opt/vmiss-stock-monitor/state.json：VMISS 去重和最近确认状态。
-- /var/lib/vps-stock-monitor/http-status.json：其它四套餐历史和去重。
+- /var/lib/vps-stock-monitor/http-status.json：其它商家历史和去重（含已停用套餐）。
 - /var/lib/vmiss-public-status/status.json：VMISS 公开观测历史。
 
 2026-09-22 本次迁移期间，Evoxt 控制台已无香港实例，旧机及接口失联，无法完整取回最新历史和去重文件。新端以静默基线开始，首次明确结果不制造补货邮件，后续补货正常通知；缺失历史不伪造为连续观测。
@@ -106,13 +104,12 @@ curl -fsS https://jp-vps-status.jp-home-subscription.workers.dev/status.json
 - unknown 保留最近确认状态、上次有货时间和无货起点。无货时长注明含未确认时段，不声称期间完全无货。
 - 连续异常达到 ERROR_ALERT_AFTER 后发一次异常通知，恢复明确结果后重置。
 - 重启保留状态；损坏文件保留副本并建立静默基线。SMTP 和 JSON 无事务保证，极少数发送后未写回即崩溃的情况可能重发。
-- 五套餐均发送至 VMISS .env 的 MAIL_TO。
+- 三套餐均发送至 VMISS .env 的 MAIL_TO。
 
 验证页面、403、访问失败、套餐边界不明或库存冲突均返回 unknown。RFCHOST 等待正常 Chromium 验证，不点击验证码或调用第三方解题服务；正常后台验证脚本与整页拦截分别处理，只有正常响应和稳定库存解析才采用结果。商家策略可能变化，不能保证永久放行。
 
 VMISS 同时识别英文 `0 Available` 和中文 `0 可用`，显式零库存优先于订购按钮。浏览器检查跟踪正常验证后的导航响应，不重复刷新；RFCHOST 正常 HTTP 200 商品页中的后台 JSD 脚本不要求额外的 clearance cookie。实际挑战页、HTTP 403 和解析歧义仍返回 unknown，不能用桌面浏览器的结果冒充日本 VPS 观测。
 
-V.PS 严格核对 Tokyo 选中位置、148/149 编号、对应标题及订单控件，其它套餐有货不能替代目标。公开数据不含邮箱、密码、cookies、HTML 或原始错误详情。
 
 ## 维护与测试
 
@@ -135,7 +132,7 @@ node --test tests/frontend.test.cjs tests/gateway.test.mjs
 
 节点部署、SSH、订阅及链路诊断由 [vps_build](https://github.com/daidaideaa/vps_build) 管理；本仓库负责库存、浏览器、邮件、状态页面、Cloudflare 状态接口及 systemd 定时器。两者独立检出为相邻目录。旧监控代码的有用历史保留在 Git 历史和本地 `.local/legacy-vmiss-stock-monitor/`；私密会话与状态不移动、不覆盖。
 
-`run_japan_cycle.py` 使用 `check_stock` 与新版 Config/Result/邮件接口；`process_result`、`single_instance` 仍存在于本仓库当前版本。旧 `monitored_check` 不再是部署依赖。VMISS 使用固定 browser-profile/；其他商家沿用 browser-profiles/ 下的既有目录（V.PS 两个套餐共用 Starter 的目录）。浏览器自行管理 cookies/localStorage/cache，不清理或导出会话。遇验证页返回 unknown。升级可用安装脚本给出的私有备份恢复代码和 unit。
+`run_japan_cycle.py` 使用 `check_stock` 与新版 Config/Result/邮件接口；`process_result`、`single_instance` 仍存在于本仓库当前版本。旧 `monitored_check` 不再是部署依赖。VMISS 使用固定 browser-profile/；其他商家沿用 browser-profiles/ 下的既有目录。浏览器自行管理 cookies/localStorage/cache，不清理或导出会话。遇验证页返回 unknown。升级可用安装脚本给出的私有备份恢复代码和 unit。
 
 GitHub 的专用 SSH 密钥保存在 `vps_build` 的 `vps-production` Environment；固定 `deploy` 操作只运行本仓库 `server/deploy-approved.sh`，应用 root 预先放置的 `/opt/vps-monitor-approved`。该账户无任意命令、文件上传或通用 sudo 权限。源代码由管理员审核后更新批准目录；运行中的库存检查和 VPN 不会被部署强制中断。
 
@@ -154,3 +151,15 @@ GitHub 的专用 SSH 密钥保存在 `vps_build` 的 `vps-production` Environmen
 诊断依据：[Cloudflare Challenge 响应头](https://developers.cloudflare.com/cloudflare-challenges/challenge-types/challenge-pages/detect-response/)、[Playwright 持久 Context](https://playwright.dev/python/docs/api/class-browsertype#browser-type-launch-persistent-context)。这些改动减少重复请求和会话丢失；不能修复商家针对 IP/ASN 的拒绝策略，也不保证 Challenge 消失。
 
 Cloudflare [不支持自动化浏览器解决生产验证](https://developers.cloudflare.com/cloudflare-challenges/reference/supported-browsers/)。退避只是降低请求频率，不会解除商家的验证策略。若验证资源加载正常却持续被拦截，需要商家根据时间和 Ray ID 查其安全事件，并确认是否提供只读库存接口或允许固定出口的低频监控。日本家宽出口、非 headless 浏览器和持久会话均不等于必然获准；不要仅凭 403 认定 IP 已被封禁，也不要把未知库存改为有货/无货。
+
+V.PS 的 Starter / Essential 已停止检查与提醒，页面和状态接口也不再展示。旧私密状态与浏览器 profile 保留，不再作为活动目标使用。
+
+## Cloudflare 免费运行边界
+
+现有 Worker 负责保存和展示公开状态，库存检查仍在日本家宽 VPS 执行，电脑离线不影响定时器。Cloudflare Browser Run 免费计划提供每天 10 分钟浏览器时间；普通 Workers 请求额度不等于浏览器运行额度。两个商家每家约 30～40 秒、每 10 分钟一轮会超过免费浏览器额度，迁移前必须根据实测耗时降低频率并设置配额上限。
+
+Browser Run 仍会向网站标识自动化浏览器，不能保证通过商家的 Cloudflare 验证。403 或验证页继续记为 unknown，不能把迁移平台当作验证已解除。测试不启用付费计划，不更改家宽 VPN 或 VMISS 节点。
+
+参考：[Browser Run 免费额度](https://developers.cloudflare.com/browser-run/pricing/)、[自动化浏览器访问限制](https://developers.cloudflare.com/browser-run/faq/)。
+
+2026-09-23 免费浏览器绑定试运行：VMISS、RFCHOST 各导航一次并观察约 18 秒，两者仍显示 `Just a moment...`，未得到商品页面。因此尚不能替代现有库存检查，也不能声称 Cloudflare 托管已解决验证问题。试运行 Worker 已删除，无定时任务或付费计划被创建。

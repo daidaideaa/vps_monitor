@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="color-scheme" content="light"><meta name="description" content="东京 VPS 库存观察：四家商户、五个套餐，日本家宽 VPS 独立监测。">
+<meta name="color-scheme" content="light"><meta name="description" content="东京 VPS 库存观察：三家商户、三个套餐，日本家宽 VPS 独立监测。">
 <title>东京 VPS 库存观察</title>
 <link rel="preload" href="./assets/fonts/openai-regular.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="./assets/fonts/openai-medium.woff2" as="font" type="font/woff2" crossorigin>
@@ -16,20 +16,18 @@
 <div class="toolbar"><div id="overview" class="overview" role="status">正在读取结果…</div><div class="actions"><span id="refresh" class="refresh" title="页面每 30 秒同步服务器已有结果，不触发商家查询。">正在同步…</span><button id="reload" type="button" title="读取服务器已有结果，不触发商家查询"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M13 6a5 5 0 1 0 .1 4M13 2v4H9"/></svg>同步结果</button></div></div>
 <main id="cards" class="grid" aria-label="商户库存"><div class="empty">正在读取最近一次检查结果。</div></main>
 <div class="monitor-info"><p>时间均为北京时间。无货时长包含暂时无法确认的时段。</p><details><summary>查询与同步有什么区别？</summary><p>VPS 每轮随机间隔 8～12 分钟访问商家。此页面每 30 秒读取服务器已经保存的结果，“同步结果”也只读取已有结果，不会额外查询商家。每个套餐的“实际检查”才是库存检测时间。全部查询与邮件提醒由日本家宽 VPS 独立完成；验证受阻或记录过期时保留待确认状态。</p></details></div>
-<footer><p>独立监控，库存及购买信息以商家官网为准。</p><p>VMISS · ZgoCloud · RFCHOST · V.PS</p></footer>
+<footer><p>独立监控，库存及购买信息以商家官网为准。</p><p>VMISS · ZgoCloud · RFCHOST</p></footer>
 </div>
 <script>
-// 四家都由日本家宽 VPS 查询，页面刷新只读取已有结果。
+// 三家都由日本家宽 VPS 查询，页面刷新只读取已有结果。
 const VPS_API='https://jp-vps-status.jp-home-subscription.workers.dev/status.json';
 const cards=document.getElementById('cards'),reload=document.getElementById('reload'),refresh=document.getElementById('refresh');
-const allowedHosts=new Set(['app.vmiss.com','clients.zgovps.com','my.rfchost.com','vps.hosting']);
+const allowedHosts=new Set(['app.vmiss.com','clients.zgovps.com','my.rfchost.com']);
 const words={available:'有货',unavailable:'无货',unknown:'尚未确认'};
 const targets=[
  {id:'vmiss-jp-tky-tri-basic',provider:'VMISS',source:'vps',product_name:'JP.TKY.TRI.Basic',product_url:'https://app.vmiss.com/store/jp-tokyo-tri'},
  {id:'zgocloud-tokyo-intel-starter',provider:'ZgoCloud',source:'vps',product_name:'Tokyo Intel VPS · Starter',product_url:'https://clients.zgovps.com/index.php?/cart/tokyo-intel-vps/'},
  {id:'rfchost-jp2-co-micro-lite',provider:'RFCHOST',source:'vps',product_name:'JP2-CO-Micro-Lite',product_url:'https://my.rfchost.com/index.php?currency=8&rp=/store/jp-2-china-optimization-network-lite'},
- {id:'vps-tokyo-cloud-starter',provider:'V.PS',source:'vps',product_name:'Tokyo Cloud KVM · Starter',product_url:'https://vps.hosting/?action=add&cmd=cart&id=148'},
- {id:'vps-tokyo-cloud-essential',provider:'V.PS',source:'vps',product_name:'Tokyo Cloud KVM · Essential',product_url:'https://vps.hosting/?action=add&cmd=cart&id=149'}
 ];
 let latest=targets.map(target=>({...target,status:'unknown',last_confirmed:'unknown',last_checked:null,stock:null,check_interval_seconds:600,pending:true})),next=30,busy=false;
 function normalize(data,source){
@@ -77,10 +75,10 @@ function explanationFor(item,state){return state==='offline'?'暂时无法读取
 function fact(label,value){const node=el('div','fact');node.append(el('div','label',label),el('div','value',value));return node;}
 function actionFor(item){const action=el('div','card-action'),source=el('span','source',({'japan-home-vps':'日本家宽直查','japan-vps-egress':'原日本备用记录','hong-kong-vps':'原香港记录'}[item.query_location]||'等待日本检查'));const link=el('a','buy-link','前往官网');link.href=safeLink(item.product_url);link.target='_blank';link.rel='noopener noreferrer';link.append(el('span','','↗'));action.append(source,link);return action;}
 function panelHead(provider,subtitle){const head=el('div','panel-head');head.append(el('h2','provider',provider),el('span','provider-host',subtitle));return head;}
-function planFor(item,compact=false){
+function planFor(item){
  const meta=productState(item),state=meta.state,plan=el('section','plan');plan.dataset.state=state;plan.dataset.productId=item.id;
  const top=el('div','plan-top'),status=el('span','plan-status');status.append(el('span','dot'),el('span','',({available:'有货',unavailable:'无货',unknown:'待确认',stale:'已过期',offline:'连接异常'})[state]));
- const name=compact?(item.id==='vps-tokyo-cloud-starter'?'Starter':'Essential'):item.product_name;
+ const name=item.product_name;
  top.append(el('h3','product',name),status);plan.append(top);
  if(!['available','unavailable'].includes(state))plan.append(el('p','plan-note',explanationFor(item,state)));
  const history=inventoryHistory(item,state),facts=el('div','facts');
@@ -93,10 +91,9 @@ function planFor(item,compact=false){
  plan.append(details,actionFor(item));return plan;
 }
 function cardFor(item){const panel=el('article','panel');panel.dataset.state=productState(item).state;panel.append(panelHead(item.provider,new URL(safeLink(item.product_url),'https://example.invalid').hostname),planFor(item));return panel;}
-function groupedCard(items){const panel=el('article','panel grouped'),plans=el('div','plans');panel.dataset.state='group';panel.append(panelHead('V.PS','Tokyo Cloud KVM'));plans.append(...items.map(item=>planFor(item,true)));panel.append(plans);return panel;}
 function draw(){
  if(!latest)return;
- cards.replaceChildren(...latest.slice(0,3).map(cardFor),groupedCard(latest.slice(3)));
+ cards.replaceChildren(...latest.map(cardFor));
  const count=state=>latest.filter(item=>productState(item).state===state).length,available=count('available'),unavailable=count('unavailable'),unknown=latest.length-available-unavailable,overview=document.getElementById('overview');
  const label=latest.every(item=>item.pending)?'正在读取库存结果':available?available+' 个套餐有货':unknown?'部分套餐尚未确认':'当前没有可购套餐';
  const summary=el('span','main-count');summary.append(el('span','dot'),el('span','',label));

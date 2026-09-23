@@ -1,4 +1,4 @@
-"""Run all five targets sequentially on the small Japan VPS, preserving state."""
+"""Run all three targets sequentially on the small Japan VPS, preserving state."""
 import logging
 import os
 import sys
@@ -17,7 +17,7 @@ def main():
     STOCK_LOG.handlers[:] = monitor.LOG.handlers
     STOCK_LOG.setLevel(logging.INFO)
     STOCK_LOG.propagate = False
-    # Same lock as the standalone monitor, held for the complete five-target cycle.
+    # Same lock as the standalone monitor, held for the complete cycle.
     with monitor.single_instance():
         path = monitor.ROOT / 'state.json'
         state = monitor.load_state(path, cfg)
@@ -29,4 +29,3 @@ def main():
         run_once(sender=send_alert, error_after=cfg.error_after)
 
 if __name__ == '__main__': main()
-

@@ -1,5 +1,5 @@
 [Unit]
-Description=Five stock checks and email on JP-HOME-HY2
+Description=Three stock checks and email on JP-HOME-HY2
 After=network-online.target
 Wants=network-online.target
 

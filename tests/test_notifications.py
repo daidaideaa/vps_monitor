@@ -45,18 +45,18 @@ class NotificationTest(unittest.TestCase):
             run_once(path, check, check, send)
             self.assertEqual(calls, [(t['id'], 'stock') for t in TARGETS])
             run_once(path, check, check, send)
-            self.assertEqual(len(calls), 4)
+            self.assertEqual(len(calls), 2)
             states[TARGETS[0]['id']] = 'unknown'
             run_once(path, check, check, send)
             states[TARGETS[0]['id']] = 'available'
             run_once(path, check, check, send)
-            self.assertEqual(len(calls), 4)
-            states[TARGETS[2]['id']] = 'unavailable'
+            self.assertEqual(len(calls), 2)
+            states[TARGETS[1]['id']] = 'unavailable'
             run_once(path, check, check, send)
-            states[TARGETS[2]['id']] = 'available'
+            states[TARGETS[1]['id']] = 'available'
             run_once(path, check, check, send)
-            self.assertEqual(calls[-1], (TARGETS[2]['id'], 'stock'))
-            self.assertEqual(len(calls), 5)
+            self.assertEqual(calls[-1], (TARGETS[1]['id'], 'stock'))
+            self.assertEqual(len(calls), 3)
 
     def test_smtp_failure_pending_and_does_not_block_other_products(self):
         calls = []
@@ -71,7 +71,7 @@ class NotificationTest(unittest.TestCase):
                 run_once(path, check, check, send)
             self.assertNotIn('SECRET', ' '.join(logs.output))
             data = json.loads(path.read_text(encoding='utf-8'))
-            self.assertEqual([p['stock_notified'] for p in data['products']], [False, True, True, True])
+            self.assertEqual([p['stock_notified'] for p in data['products']], [False, True])
             calls.clear()
             run_once(path, check, check, lambda p, event: calls.append(p['id']))
             self.assertEqual(calls, [TARGETS[0]['id']])

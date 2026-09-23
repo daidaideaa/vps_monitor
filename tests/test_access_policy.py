@@ -163,7 +163,7 @@ class BackoffTest(unittest.TestCase):
             second = stock.run_once(path, http, browser)
             self.assertEqual(second['products'][1], old)
             self.assertEqual(browser.call_count, 1)
-            self.assertEqual(http.call_count, 6)
+            self.assertEqual(http.call_count, 2)
             self.assertNotIn(target, [c.args[0] for c in http.call_args_list])
 
     def test_vmiss_backoff_preserves_state_and_runs_other_merchants(self):

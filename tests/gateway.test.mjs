@@ -4,7 +4,7 @@ import gateway, {publicSnapshot, StatusSnapshot} from '../status-gateway/index.m
 
 const entries = [
   ['vmiss-jp-tky-tri-basic','app.vmiss.com'], ['zgocloud-tokyo-intel-starter','clients.zgovps.com'],
-  ['rfchost-jp2-co-micro-lite','my.rfchost.com'], ['vps-tokyo-cloud-starter','vps.hosting'], ['vps-tokyo-cloud-essential','vps.hosting'],
+  ['rfchost-jp2-co-micro-lite','my.rfchost.com'],
 ];
 const checkedAt = new Date(Date.now()-60000).toISOString();
 const snapshot = () => ({schema_version:2, query_location:'japan-home-vps', published_at:checkedAt,
@@ -24,6 +24,18 @@ test('only fixed products and public fields can be published',()=>{
   const badURL=snapshot();badURL.products[0].product_url='https://app.vmiss.com.evil.invalid/';assert.throws(()=>publicSnapshot(badURL));
   const future=snapshot();future.published_at=new Date(Date.now()+3600000).toISOString();assert.throws(()=>publicSnapshot(future));
 });
+
+test('legacy stored and incoming snapshots never expose retired V.PS products',async()=>{
+  const legacy=snapshot();
+  legacy.products.push({id:'vps-tokyo-cloud-starter',product_url:'https://vps.hosting/',status:'available'},
+    {id:'vps-tokyo-cloud-essential',product_url:'https://vps.hosting/',status:'available'});
+  assert.equal(publicSnapshot(legacy).products.length,3);
+  const instance=new StatusSnapshot({storage:{get:async()=>legacy}});
+  const response=await instance.fetch(new Request('https://gateway.invalid/status.json'));
+  assert.equal((await response.json()).products.length,3);
+  legacy.products[3].id='unapproved-store';
+  assert.throws(()=>publicSnapshot(legacy));
+});
 test('clock correction can replace a previously stored future snapshot',async()=>{
   const future=snapshot();future.published_at=new Date(Date.now()+3600000).toISOString();
   const storage=new Map([['latest',future]]);
@@ -39,7 +51,7 @@ test('public read is separate from authenticated publishing, with no merchant re
   assert.equal((await gateway.fetch(request(snapshot()),e)).status,204);
   const response=await gateway.fetch(new Request('https://gateway.invalid/status.json'),e);
   assert.equal(response.status,200);assert.equal(response.headers.get('Access-Control-Allow-Origin'),'*');
-  assert.equal((await response.json()).products.length,5);
+  assert.equal((await response.json()).products.length,3);
   const older=snapshot();older.published_at=new Date(Date.parse(checkedAt)-60000).toISOString();
   assert.equal((await gateway.fetch(request(older),e)).status,409);
 });

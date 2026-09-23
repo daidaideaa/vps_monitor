@@ -12,7 +12,7 @@ VMISS_MONITOR = Path('/opt/vmiss-stock-monitor')
 OUTPUT = Path('/var/lib/vmiss-public-status/status.json')
 VPS_STATE = Path('/var/lib/vps-stock-monitor/http-status.json')
 STATES = {'available', 'unavailable', 'unknown'}
-ALLOWED_HOSTS = {'VMISS': 'app.vmiss.com', 'ZgoCloud': 'clients.zgovps.com', 'RFCHOST': 'my.rfchost.com', 'V.PS': 'vps.hosting'}
+ALLOWED_HOSTS = {'VMISS': 'app.vmiss.com', 'ZgoCloud': 'clients.zgovps.com', 'RFCHOST': 'my.rfchost.com'}
 FALLBACK_URLS = {'VMISS': 'https://app.vmiss.com/', **{t['provider']: t['product_url'] for t in TARGETS}}
 
 

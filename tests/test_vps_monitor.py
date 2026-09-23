@@ -10,40 +10,7 @@ from stock_targets import TARGETS
 from export_status import combined_snapshot
 
 
-def vps_page(starter='', essential='outofstock', location='Tokyo', order=True):
-    def card(plan_id, name, classes):
-        badge = '<div>Out<br>of stock</div>' if 'outofstock' in classes else ''
-        return f'<div class="card cart-product {classes}" data-value="{plan_id}">{badge}<h4>{name}</h4></div>'
-    return (f'<div><a class="cart-category selected">{location}</a>'
-            + card('148', 'Starter', starter) + card('149', 'Essential', essential)
-            + card('151', 'Premium', '' if 'selected' in starter + essential else 'selected')
-            + '<section id="orderpage-summary"><button onclick="submitOrder();return false;" '
-            + ('' if order else 'disabled') + '>Order</button></section></div>')
-
-
 class ParserTest(unittest.TestCase):
-    def test_vps_isolated_cards_and_out_of_stock_before_heading(self):
-        for target in TARGETS[2:]:
-            self.assertEqual(parse_stock(vps_page('outofstock'), 'V.PS', target)['status'], 'unavailable')
-        self.assertEqual(parse_stock(vps_page('selected'), 'V.PS', TARGETS[2])['status'], 'available')
-        self.assertEqual(parse_stock(vps_page('outofstock', 'selected'), 'V.PS', TARGETS[3])['status'], 'available')
-        self.assertEqual(parse_stock(vps_page('outofstock selected'), 'V.PS', TARGETS[2])['status'], 'unavailable')
-
-    def test_vps_ambiguity_and_challenges_never_available(self):
-        good = vps_page('selected')
-        cases = [vps_page(), vps_page('selected', location='Osaka'),
-                 vps_page('selected', order=False), good.replace('Starter', 'Mini Starter'),
-                 good.replace('data-value="148"', 'data-value="777"'), good + good,
-                 good + '<div>Verify you are human</div>', good + '<div class="cf-turnstile"></div>',
-                 good.replace('card cart-product selected', 'card cart-product selected disabled'),
-                 good.replace('<div class="card cart-product selected"', '<div hidden class="card cart-product selected"'),
-                 good + '<script src="/cdn-cgi/challenge-platform/a.js"></script>']
-        for html in cases:
-            with self.subTest(html=html):
-                self.assertEqual(parse_stock(html, 'V.PS', TARGETS[2])['status'], 'unknown')
-        # Checkout's inactive captcha library strings are not an interstitial.
-        self.assertEqual(parse_stock(good + '<script>var widget="g-recaptcha";</script>', 'V.PS', TARGETS[2])['status'], 'available')
-
     def test_rfchost(self):
         def parse(card):
             return parse_stock('<div>JP2-CO-Micro-Lite ' + card + ' JP2-CO-Mini-Lite 12 Available</div>', 'RFCHOST')
@@ -81,6 +48,22 @@ class ParserTest(unittest.TestCase):
 
 
 class StateTest(unittest.TestCase):
+    def test_retired_products_are_never_checked_notified_or_exported(self):
+        retired={'id':'vps-tokyo-cloud-starter','provider':'V.PS','status':'available'}
+        calls=[]
+        def check(target):
+            calls.append(target['id'])
+            return {'status':'unavailable','stock':0}
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/'state.json'
+            path.write_text(json.dumps({'products':[retired]}))
+            result=run_once(path,check,check)
+        self.assertEqual(calls,[t['id'] for t in TARGETS])
+        self.assertEqual([p['id'] for p in result['products']],calls)
+        public=combined_snapshot({}, {'products':[retired]})
+        self.assertEqual(len(public['products']),3)
+        self.assertNotIn('V.PS',json.dumps(public))
+
     def test_unknown_gap_restock_and_restart_history(self):
         def update(at, status, previous=None):
             return update_product(TARGETS[1], {'status': status, 'stock': 1 if status == 'available' else 0}, previous, '2026-09-21T' + at + '+00:00')
@@ -109,7 +92,7 @@ class StateTest(unittest.TestCase):
             path = Path(directory) / 'status.json'
             result = run_once(path, http, browser)
             self.assertEqual(browser_calls, ['RFCHOST'])
-            self.assertEqual([p['status'] for p in result['products']], ['unavailable', 'available', 'unavailable', 'unavailable'])
+            self.assertEqual([p['status'] for p in result['products']], ['unavailable', 'available'])
             self.assertTrue(all(p['check_interval_seconds'] == 600 for p in result['products']))
             self.assertEqual(json.loads(path.read_text(encoding='utf-8')), result)
 
@@ -122,13 +105,13 @@ class StateTest(unittest.TestCase):
                 run_once(path, http, lambda target: (_ for _ in ()).throw(RuntimeError('interrupted')))
             self.assertEqual(json.loads(path.read_text())['products'][0]['status'], 'unavailable')
 
-    def test_export_five_vps_products_and_no_credentials(self):
+    def test_export_three_active_products_and_no_credentials(self):
         old = update_product(TARGETS[1], {'status': 'available', 'stock': 3}, None, '2026-09-21T00:00:00+00:00')
         current = update_product(TARGETS[1], {'status': 'unknown', 'explanation': 'secret-cookie'}, old, '2026-09-21T00:03:00+00:00')
         current['SMTP_PASSWORD'] = 'secret-password'
         result = combined_snapshot({}, {'products': [current]})
-        self.assertEqual([p['provider'] for p in result['products']], ['VMISS', 'ZgoCloud', 'RFCHOST', 'V.PS', 'V.PS'])
-        self.assertEqual([p['status'] for p in result['products']], ['unknown'] * 5)
+        self.assertEqual([p['provider'] for p in result['products']], ['VMISS', 'ZgoCloud', 'RFCHOST'])
+        self.assertEqual([p['status'] for p in result['products']], ['unknown'] * 3)
         self.assertTrue(all(p['check_interval_seconds'] == 600 for p in result['products']))
         self.assertTrue(all(p['query_location'] == 'japan-home-vps' for p in result['products']))
         self.assertEqual(result['products'][2]['last_available_at'], old['last_checked'])
