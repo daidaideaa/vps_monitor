@@ -55,6 +55,41 @@ class ObservationTest(unittest.TestCase):
         self.assertEqual(result['diagnostics']['cf_ray'], 'abc-NRT')
         self.assertFalse(result['diagnostics']['challenge_observed'])
 
+    def test_first_document_after_navigation_timeout_gets_remaining_window(self):
+        for arrives in (True, False):
+            with self.subTest(arrives=arrives):
+                clock = [0.0]
+                page = MagicMock()
+                page.url = 'about:blank'
+                page.title.return_value = 'Products'
+                handler = []
+                page.on.side_effect = lambda event, callback: handler.append(callback)
+                def goto(*args, **kwargs):
+                    clock[0] = 1.0
+                    raise TimeoutError('first document still loading')
+                def wait(ms):
+                    clock[0] += ms / 1000
+                    if arrives and page.url == 'about:blank':
+                        page.url = 'https://app.vmiss.com/store'
+                        handler[0](SimpleNamespace(status=200, headers={'content-type': 'text/html'},
+                                   frame=page.main_frame,
+                                   request=SimpleNamespace(is_navigation_request=lambda: True)))
+                page.goto.side_effect = goto
+                page.wait_for_timeout.side_effect = wait
+                parse = MagicMock(return_value={'status': 'unavailable', 'stock': 0})
+                with patch.object(policy.time, 'monotonic', side_effect=lambda: clock[0]):
+                    result = policy.observe_page(page, 'https://app.vmiss.com/store', 'VMISS', parse,
+                                                 lambda url: url.startswith('https://app.vmiss.com/'), 3000)
+                page.goto.assert_called_once()
+                page.reload.assert_not_called()
+                if arrives:
+                    self.assertEqual(result['status'], 'unavailable')
+                    self.assertEqual(parse.call_count, 2)
+                else:
+                    self.assertEqual(result['diagnostics']['failure_category'], 'browser_timeout')
+                    self.assertEqual(result['diagnostics']['elapsed_ms'], 3000)
+                    parse.assert_not_called()
+
     def test_403_and_cf_header_never_parse_stock(self):
         for status, headers, category in [(403, {}, 'http_403'), (200, {'cf-mitigated': 'challenge'}, 'cf_mitigated_challenge')]:
             result, parse = self.observe([(status, headers)])

@@ -100,6 +100,12 @@ def observe_page(page, url, provider, inspect, allowed, timeout_ms=40000):
             # The first document can time out while normal verification navigates.
         previous = None
         while time.monotonic() < deadline:
+            # goto can time out before the first document arrives. about:blank
+            # is a pending navigation, not evidence of a merchant redirect.
+            if not document:
+                category = 'browser_timeout'
+                page.wait_for_timeout(500)
+                continue
             headers = document.get('headers', {})
             category = response_category(document.get('status'), headers)
             seen_challenge |= category in CHALLENGES

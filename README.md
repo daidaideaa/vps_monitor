@@ -145,6 +145,7 @@ GitHub 的专用 SSH 密钥保存在 `vps_build` 的 `vps-production` Environmen
 - VMISS、RFCHOST 每轮直接使用浏览器，不先发送一次注定被拦截的 HTTP 请求。其他商家保留 HTTP → 必要时浏览器；HTTP 使用固定通用 `Mozilla/5.0` 标识，浏览器使用自身默认 UA，不随机伪造指纹。
 - 所有浏览器固定 `en-US`、`Asia/Tokyo`。RFCHOST 保留已有 Xvfb + 非 headless Chromium；VMISS 保留 headless，先解决临时 profile 丢失问题。未在 JP-Home 做模式对照测试，不声称非 headless 必然更有效；不新增 stealth 依赖。
 - 每次只主动导航一次，观察正常验证产生的最终主文档响应。导航等待超时后，如观察窗口尚有时间，继续等待；不会 reload/goto 重试。HTTP 403、`cf-mitigated: challenge` 或验证页面始终是 unknown，只有正常主文档及连续两次一致的严格解析才确认库存。
+- 首次导航超时但还停留在 `about:blank` 时，继续等待首个主文档到达，直到原观察期限；不能提前把尚在加载的空白页当成离开商家页面。未收到主文档时不解析库存，也不增加导航次数。
 - Challenge/403 按商家持久退避 30 分钟 → 1 小时 → 2 小时（封顶），确认有货或无货后归零。期间网络错误不会被当成验证解除。8～12 分钟的原定时器不变，退避到期后的下一轮再检查，因此实际间隔可能额外延后最多一轮。其他商家照常检查。跳过的目标不更新 last_checked、库存和邮件次数；原邮件去重和 Worker 发布白名单保持不变。
 - 私有状态和日志只添加 provider、HTTP status、cf-mitigated、cf-ray、最终 host/path（去掉 query/fragment/用户信息）、截断标题、耗时、连续验证次数和失败类别。区分 dns_failure、network_failure/network_timeout、tls_failure、http_403、cf_mitigated_challenge、challenge_page、parse_failure、browser_timeout 等。无 HTML、截图、cookie 导出或原始异常文本；浏览器自身 profile 属于私密运行数据，不提交或上传。
 - 安装脚本同步备份/安装共享 access_policy.py，不覆盖库存状态和 profile。提交代码不会自动更新 JP-Home；原有受控安装流程仍适用，无需修改或重启 VPN。profile 是浏览器正常磁盘状态，站点自行设置的过期时间与浏览器 session 生命周期仍有效，不延长 clearance、不恢复过期凭据。
