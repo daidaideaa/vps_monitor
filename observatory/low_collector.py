@@ -16,6 +16,7 @@ from .collector import cold
 from .log_watch import LogWatch
 from .low_state import LowIncidents, budget_level
 from .store import Store
+from .budget import project
 
 
 def send(config, samples, incidents):
@@ -65,7 +66,7 @@ def main():
             if not t.get('enabled',True):continue
             funcs[t['id']+'.icmp']=functools.partial(probes.ping,t['host'],bind)
             funcs[t['id']+'.tcp']=functools.partial(probes.tcp,t['host'],t['tcp_port'],tcp_bind)
-            if t.get('proxy_port'):funcs[t['id']+'.hy2']=functools.partial(probes.https,config['test_url'],'http://127.0.0.1:'+str(t['proxy_port']))
+            if t.get('proxy_port'):funcs[t['id']+'.'+t.get('protocol','hy2')]=functools.partial(probes.https,config['test_url'],'http://127.0.0.1:'+str(t['proxy_port']))
         if probes.WINDOWS:funcs['client.http']=functools.partial(probes.https,config['test_url'],'http://127.0.0.1:7890')
         else:
             funcs['egress.https']=functools.partial(probes.https,config['test_url'])
@@ -82,7 +83,7 @@ def main():
         for c in checks.values():c['new']=False
         for key,value in results.items():
             value={**value,'sampled_at':now,'kind':kind,'new':True};checks[key]=value
-            if key.endswith(('.hy2','.service')) or key=='client.http':
+            if key.endswith(('.hy2','.vless','.service')) or key=='client.http':
                 deadline=incidents.observe(key,value,now,kind)
                 if deadline:due[key]=deadline
                 else:due.pop(key,None)
@@ -180,18 +181,18 @@ def main():
             selected={k:v for k,v in jobs().items() if due.get(k,float('inf'))<=now}
             for key in selected:due.pop(key,None)
             if selected:execute(selected,'retry')
-            if now>=next_cold and budget['level']==0:
-                execute({t['id']+'.hy2_new':functools.partial(cold,config,t) for t in config.get('targets',[]) if t.get('enabled',True) and t.get('cold_command')},'cold')
+            if now>=next_cold and budget['level']==0 and config.get('cold_enabled',True):
+                execute({t['id']+'.'+t.get('protocol','hy2')+'_new':functools.partial(cold,config,t) for t in config.get('targets',[]) if t.get('enabled',True) and t.get('cold_command')},'cold')
                 next_cold=now+int(config.get('cold_interval',1800))
             if upload_job and upload_job[0].done():
                 future,ids,changed=upload_job
                 try:
                     upload_state=future.result();store.acknowledge(ids);versions.update(changed);failures=0
-                    budget['measured_upload_payload_bytes']+=upload_state['payload_bytes'];next_upload=time.time()+120
+                    budget['measured_upload_payload_bytes']+=upload_state['payload_bytes'];next_upload=time.time()+interval
                     budget['level']=max(budget['level'],upload_state.get('budget_level',0))
                 except Exception as exc:
                     failures+=1;upload_state={'state':'failed','reason':type(exc).__name__,'failed_at':time.time()}
-                    next_upload=time.time()+min(900,120*2**min(failures-1,3))
+                    next_upload=time.time()+min(900,interval*2**min(failures-1,3))
                 upload_job=None
             if not upload_job and now>=next_upload:
                 pending=store.pending(30)
@@ -199,14 +200,11 @@ def main():
                 while pending and len(json.dumps({'samples':[s for _,s in pending],'incidents':changed}).encode())>800000:pending.pop()
                 if pending or changed:
                     upload_job=(uploader.submit(send,config,[s for _,s in pending],changed),[i for i,_ in pending],{i['id']:json.dumps(i,sort_keys=True) for i in changed})
-                else:next_upload=now+120
+                else:next_upload=now+interval
             if now>=next_budget:
-                elapsed=max(86400,now-budget['started_at'])
-                # Reserve 5 MiB/day for keepalives, protocol overhead and private UI usage.
-                budget['monthly_estimate_bytes']=round((budget['estimated_probe_bytes']+budget['measured_upload_payload_bytes'])/elapsed*30*86400+150*1024*1024)
+                budget.update(project(budget,now))
                 if now-budget['started_at']>=86400:budget['level']=budget_level(budget['monthly_estimate_bytes'],budget['level'])
-                budget['accounting']='payload_measured_plus_probe_estimates_and_keepalive_reserve'
-                store.set('budget',budget);next_budget=now+86400 if now-budget['started_at']>=86400 else now+3600
+                store.set('budget',budget);next_budget=now+600
             if now>=next_trim:
                 store.trim(max_bytes=int(config.get('buffer_mb',40))*1024*1024);next_trim=now+3600
             if args.once:

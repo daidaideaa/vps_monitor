@@ -73,7 +73,7 @@ class LowIncidents:
                 i['report'] = classify(self.store.window(i['started_at']-600, i['end_at']))
                 i['report'].pop('events',None)
                 if i.get('manual'):i['report']['facts'].insert(0,'用户手动标记；是否断链仍以实际探测为准。')
-                i['report']['missing'].append('120 秒常规采样；持续时间为估计，缺测不算丢包。无持续包捕获。')
+                i['report']['missing'].append('低频常规采样；间隔见对应样本，持续时间为估计，缺测不算丢包。无持续包捕获。')
                 # A small transition digest survives raw retention, without copying inventories.
                 rows=self.store.window(i['started_at']-600,i['end_at']); timeline=[];previous={}
                 for row in rows:
