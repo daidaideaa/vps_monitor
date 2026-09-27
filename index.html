@@ -12,16 +12,16 @@
 </head>
 <body><div class="wrap">
 <header class="site-header"><a class="brand" href="./" aria-label="库存监控首页"><span class="brand-icon" aria-hidden="true"><i></i><i></i></span>库存观察 <span class="breadcrumb">东京</span></a><a class="repo-link" href="https://github.com/daidaideaa/vps_monitor" target="_blank" rel="noopener noreferrer">GitHub ↗</a></header>
-<nav class="monitor-info"><a href="./">库存</a> · <a href="./network.html">链路（登录）</a> · <a href="./network.html#incidents">故障记录（登录）</a></nav>
+<nav class="monitor-info"><a href="./">库存</a> · <a href="./network.html">链路</a> · <a href="./network.html#incidents">故障记录</a></nav>
 <section class="heading"><div><h1>东京 VPS 库存</h1><p class="subtitle">跟踪频道补货与优惠码，按消息原始时间展示。</p></div><span class="location"><span aria-hidden="true">◎</span> Telegram 频道观测</span></section>
 <div class="toolbar"><div id="overview" class="overview" role="status">正在读取结果…</div><div class="actions"><span id="refresh" class="refresh" title="页面每 60 秒读取已有的频道观测。">正在同步…</span><button id="reload" type="button" title="读取服务器已有结果，不触发商家查询"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M13 6a5 5 0 1 0 .1 4M13 2v4H9"/></svg>同步结果</button></div></div>
 <main id="cards" class="grid" aria-label="商户库存"><div class="empty">正在读取最近一次检查结果。</div></main>
-<div class="monitor-info"><p>时间均为北京时间。页面每 60 秒刷新；频道报告超过 30 分钟显示“当前待确认”。</p><details><summary>库存与优惠码从哪里来？</summary><p>HostMonit、全球 VPS 余量监控、GCPCN 的新消息与编辑是本页的库存来源。频道发现商家变化可能存在延迟。优惠条款不完整时不推算折后价；最终库存、币种、周期及优惠以官网结算为准。历史消息仅用于建立基线，不会重新触发补货通知。</p></details></div>
+<div class="monitor-info"><p>时间均为北京时间。页面每 60 秒刷新；频道报告超过 30 分钟显示“当前待确认”。</p><details><summary>库存与优惠码从哪里来？</summary><p>来源包括 HostMonit、全球 VPS 余量监控、GCPCN，以及已接入的 VMISS 公告、DMIT 活动频道和相关客户群管理员消息。频道发现商家变化可能存在延迟。优惠条款不完整时不推算折后价；最终库存、币种、周期及优惠以官网结算为准。历史消息仅用于建立基线，不会重新触发补货通知。</p></details></div>
 <footer><p>独立监控，库存及购买信息以商家官网为准。</p><p>VMISS · GreenCloud · DMIT · GoMami</p></footer>
 </div>
 <script>
 // Public inventory only; no private network endpoints are fetched on this page.
-const VPS_API='https://38.47.125.205/monitor/status.json';
+const VPS_API='https://vps-monitor.daidaidefish.workers.dev/api/status';
 const cards=document.getElementById('cards'),reload=document.getElementById('reload'),refresh=document.getElementById('refresh');
 const allowedHosts=new Set(['app.vmiss.com','greencloudvps.com','www.dmit.io','gomami.io']);
 const words={available:'有货',unavailable:'无货',unknown:'尚未确认'};
@@ -34,7 +34,7 @@ const targets=[
 let latest=targets.map(target=>({...target,status:'unknown',last_confirmed:'unknown',last_checked:null,stock:null,check_interval_seconds:600,pending:true})),next=60,busy=false;
 function collectorExplanation(collector){const state=collector?.state;if(state==='connected')return '监听正常，库存待确认';return ({awaiting_authorization:'需要重新授权 Telegram 独立会话',starting:'监听正在启动',disconnected:'监听正在重连，库存待确认',rate_limited:'频道请求限流等待，库存待确认',paused:'库存监听已暂停'})[state]||'监听状态待确认';}
 function normalize(data,source){
- if(data?.schema_version===3&&Array.isArray(data.products))return data.products.map(p=>({...p,channel:p.source,last_checked:p.event_at?new Date(p.event_at*1000).toISOString():null,check_interval_seconds:600,unknown_count:0,explanation:collectorExplanation(data.collector),telegram:true}));
+ if(data?.schema_version===3&&Array.isArray(data.products))return data.products.map(p=>({...p,channel:p.source,last_checked:p.event_at?new Date(p.event_at*1000).toISOString():null,check_interval_seconds:600,unknown_count:0,explanation:collectorExplanation(data.collector)+(p.stale?'：最近一条库存报告已超过 30 分钟。':!p.event_at?'：尚未取得该套餐的库存报告。':''),telegram:true}));
  if(data&&[1,2].includes(data.schema_version)&&Array.isArray(data.products))return data.products;
  if(source==='vps'&&data&&data.schema_version===1&&!data.products&&(!data.provider||data.provider==='VMISS'))return [{...data,id:'vmiss-jp-tky-tri-basic',provider:'VMISS'}];
  throw new Error('Data');
@@ -89,14 +89,24 @@ function planFor(item){
  facts.append(fact('实际检查',checkedTime(meta)),fact('本轮无货',history[0][1]));
  plan.append(facts);
  if(item.telegram){
-   facts.replaceChildren(fact('频道报告',checkedTime(meta)),fact('当前状态',state==='available'?'频道报告有货':state==='unavailable'?'频道报告无货':'当前待确认'));
+   facts.replaceChildren(fact('频道报告',checkedTime(meta)),fact('上次报告结论',words[item.last_confirmed]||'尚无记录'));
    const extra=el('div','history-facts');
    for(const p of item.prices||[])extra.append(fact('来源标价',p.amount+' '+p.currency+'/'+p.cycle));
-   const c=item.coupon,valid=c&&c.validity!=='expired'&&(!c.expires_at||c.expires_at>Date.now()/1000);
-   extra.append(fact('优惠码',valid?c.code:'未找到适用且未过期的优惠码'));
-   if(valid){extra.append(fact('周期与续费',(c.cycle||'周期未明确')+' · '+(c.recurring?'来源报告循环优惠':'续费优惠未确认')));if(c.discounted)extra.append(fact('规则计算价 · 结算待验证',c.discounted.amount+' '+c.discounted.currency+'/'+c.discounted.cycle));extra.append(fact('有效期',c.expires_at?new Date(c.expires_at*1000).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'}):'来源未披露'));extra.append(el('p','plan-note',c.terms));}
-   if(/^https:\/\/t\.me\/(hostmonit|vps_spiders|gcpcn)\/\d+$/.test(item.source_url||'')){const link=el('a','buy-link','查看来源消息 ↗');link.href=item.source_url;link.target='_blank';link.rel='noopener noreferrer';extra.append(link);}
-   if(valid&&c.source_url!==item.source_url&&/^https:\/\/t\.me\/(hostmonit|vps_spiders|gcpcn)\/\d+$/.test(c.source_url||'')){const link=el('a','buy-link','查看优惠来源 ↗');link.href=c.source_url;link.target='_blank';link.rel='noopener noreferrer';extra.append(link);}
+   const c=item.coupon,valid=c&&c.validity!=='expired'&&(!c.expires_at||c.expires_at>Date.now()/1000),box=el('section','coupon-box');
+   box.append(el('div','coupon-kicker',valid?'来源报告的优惠码':'优惠码'));
+   if(valid){
+    const line=el('div','coupon-code-line'),code=el('code','coupon-code',c.code),copy=el('button','coupon-copy','复制');copy.type='button';
+    copy.onclick=async()=>{try{await navigator.clipboard.writeText(c.code);copy.textContent='已复制';}catch{copy.textContent='请选中复制';}};
+    line.append(code,copy);box.append(line);
+    const terms=el('div','coupon-meta');terms.append(fact('周期',c.cycle||'未明确'),fact('续费',c.recurring?'循环优惠':'未确认'),fact('有效期',c.expires_at?new Date(c.expires_at*1000).toLocaleDateString('zh-CN',{timeZone:'Asia/Shanghai'}):'未披露'));
+    box.append(terms);
+    if(c.discounted)box.append(el('p','coupon-price','按来源规则：'+c.discounted.amount+' '+c.discounted.currency+'/'+c.discounted.cycle+'（结算待确认）'));
+    box.append(el('p','coupon-caution',c.observed_at&&Date.now()/1000-c.observed_at>30*86400?'历史优惠，当前有效性待确认':'以官网结算为准'));
+    if(c.terms){const detail=el('details','coupon-terms');detail.append(el('summary','','查看来源条款'),el('p','',c.terms));box.append(detail);}
+   }else box.append(el('p','coupon-empty','暂未找到适用且未过期的优惠码'));
+   extra.append(box);
+   if(/^https:\/\/t\.me\/(hostmonit|vps_spiders|gcpcn|dmitnews|vmiss_com|vmisscom|gomaminetworks)\/\d+$/.test(item.source_url||'')){const link=el('a','buy-link','查看来源消息 ↗');link.href=item.source_url;link.target='_blank';link.rel='noopener noreferrer';extra.append(link);}
+   if(valid&&c.source_url!==item.source_url&&/^https:\/\/t\.me\/(hostmonit|vps_spiders|gcpcn|dmitnews|vmiss_com|vmisscom|gomaminetworks)\/\d+$/.test(c.source_url||'')){const link=el('a','buy-link','查看优惠来源 ↗');link.href=c.source_url;link.target='_blank';link.rel='noopener noreferrer';extra.append(link);}
    plan.append(extra,actionFor(item));return plan;
  }
  const details=el('details','plan-details'),summary=el('summary','','检查详情'),detailFacts=el('div','history-facts');

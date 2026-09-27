@@ -33,7 +33,7 @@ test('一次刷新只读 VPS API，四张卡片展示四个独立套餐', async 
   const urls = [];
   const p = page(async url => { urls.push(url); return Response.json(snapshot()); });
   await p.run('load()');
-  assert.deepEqual(urls, ['https://38.47.125.205/monitor/status.json']);
+  assert.deepEqual(urls, ['https://vps-monitor.daidaidefish.workers.dev/api/status']);
   assert.deepEqual(p.states(), ['available','unavailable','unavailable','unavailable']);
   assert.equal(p.nodes.cards.children.length, 4);
   assert.equal(p.run("latest.map(p=>p.provider).join(',')"), 'VMISS,GreenCloud,DMIT,GoMami');
@@ -122,4 +122,13 @@ test('仅保留四个目标，拒绝退休商家链接，兼容旧间隔字段',
   assert.equal(p.run('latest.every(item => item.check_interval_seconds === 600)'), true);
   assert.equal(p.run("safeLink('https://vps.hosting/')"), '#');
   assert.equal(p.run("productState({}).interval"), 600);
+});
+
+
+test('频道历史与当前状态分开，优惠码集中显示复制和条款', async()=>{
+ const data={schema_version:3,collector:{state:'connected'},products:snapshot().products.slice(0,4).map(p=>({...p,event_at:Date.now()/1000-7200,stale:true,status:'unknown',last_confirmed:'unavailable',source:'hostmonit',coupon:{code:'SAVE20',cycle:'年',recurring:true,validity:'source_reported',terms:'限年付',observed_at:Date.now()/1000}}))};
+ const p=page(async()=>Response.json(data));await p.run('load()');
+ assert.ok(p.text().includes('SAVE20'));assert.ok(p.text().includes('复制'));
+ assert.ok(p.text().includes('上次报告结论'));assert.ok(p.text().includes('超过 30 分钟'));
+ assert.ok(p.text().includes('循环优惠'));assert.ok(p.text().includes('查看来源条款'));
 });

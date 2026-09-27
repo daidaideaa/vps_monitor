@@ -1,19 +1,16 @@
 'use strict';
-const API='https://38.47.125.205/monitor';
-let token=null,challenge=null,cursor=0,history=[],busy=false,lastLoad=0;
+const API='https://vps-monitor.daidaidefish.workers.dev/api/network';
+let history=[],busy=false,lastLoad=0,lastHistory=0;
 const $=id=>document.getElementById(id),fmt=t=>t?new Date(t*1000).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):'尚无记录';
 const node=(tag,text,cls)=>{const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(cls)e.className=cls;return e;};
 const names={windows:'你的电脑',vmiss:'VMISS 服务端',home:'日本家宽'};
+const metricName=k=>({'gateway.icmp':'本地网关','china.icmp':'国内对照','home.icmp':'备用 VPS · ICMP','home.tcp':'备用 VPS · TCP','home.hy2':'备用 VPS · HY2','vmiss.icmp':'主 VPS · ICMP','vmiss.tcp':'主 VPS · TCP','vmiss.hy2':'主 VPS · HY2','client.http':'当前日常代理 · HTTP','egress.https':'服务器 HTTPS 出口','egress.dns':'服务器 DNS','vmiss-hy2.service':'HY2 服务','manual.client':'手动故障标记'})[k]||'其他检查';
 const bytes=n=>Number.isFinite(n)?(n/1048576).toFixed(1)+' MiB':'—';
-async function api(path,body){
- const r=await fetch(API+path,{method:body===undefined?'GET':'POST',headers:{...(token?{Authorization:'Bearer '+token}:{}),...(body!==undefined?{'Content-Type':'application/json'}:{})},body:body!==undefined?JSON.stringify(body):undefined,cache:'no-store',signal:AbortSignal.timeout(12000)});
- if(r.status===401){token=null;$('private').hidden=true;$('login').hidden=false;$('logout').hidden=true;throw Error('请重新登录');}
- if(!r.ok)throw Error(r.status===429?'发送过于频繁，请稍后再试':r.status===400?'验证码无效、过期或尝试次数已用完':'数据服务不可达（HTTP '+r.status+'）');
+async function api(path){
+ const r=await fetch(API+path,{signal:AbortSignal.timeout(12000)});
+ if(!r.ok)throw Error('数据服务不可达（HTTP '+r.status+'）');
  return r.json();
 }
-$('request').onclick=async()=>{const b=$('request');b.disabled=true;try{const r=await api('/auth/request',{});challenge=r.challenge;$('login-status').textContent=r.message;$('code').focus();}catch(e){$('login-status').textContent=e.message;}finally{setTimeout(()=>b.disabled=false,60000);}};
-$('verify').onsubmit=async e=>{e.preventDefault();if(!challenge){$('login-status').textContent='请先发送验证码。';return;}try{const r=await api('/auth/verify',{challenge,code:$('code').value});token=r.token;$('code').value='';$('login').hidden=true;$('private').hidden=false;$('logout').hidden=false;await load();}catch(err){$('login-status').textContent=err.message;}};
-$('logout').onclick=async()=>{try{await api('/auth/logout',{});}finally{token=null;history=[];cursor=0;$('sources').replaceChildren();$('charts').replaceChildren();$('incident-list').replaceChildren();$('reports').replaceChildren();$('private').hidden=true;$('login').hidden=false;$('logout').hidden=true;}};
 function sourceCards(data){
  $('sources').replaceChildren();
  for(const [id,entry] of Object.entries(data.sources)){
@@ -24,9 +21,9 @@ function sourceCards(data){
   const table=node('table',undefined,'metrics');const head=node('tr');for(const t of ['检查','最近结果','耗时','常规成功/失败'])head.append(node('th',t));table.append(head);
   for(const [metric,v] of Object.entries(s.checks||{})){
    const row=node('tr'),stat=data.statistics.regular_checks[id]?.[metric];
-   for(const text of [metric,({ok:'成功',fail:'失败',error:'待定位',unknown:'缺测'})[v.state]||v.state,v.ms==null?'—':v.ms+' ms',stat?stat.good+' / '+stat.bad:'—'])row.append(node('td',text));table.append(row);
+   for(const text of [metricName(metric),({ok:'成功',fail:'失败',error:'待定位',unknown:'缺测'})[v.state]||v.state,v.ms==null?'—':v.ms+' ms',stat?stat.good+' / '+stat.bad:'—'])row.append(node('td',text));table.append(row);
   }card.append(table);
-  if(id==='windows')card.append(node('p','实际客户端：'+(s.client?.profile||'未知')+' · 选择 '+JSON.stringify(s.client?.groups||{})+' · TUN '+(s.client?.tun?.enable?'开启':'关闭或未知'),'fact-line'));
+  if(id==='windows')card.append(node('p','独立 HY2 探针与当前日常代理分别观测。','fact-line'));
   const h=s.host||{},mem=h.memory||{};
   card.append(node('p','CPU '+(h.cpu_percent??'—')+'% · 可用内存 '+bytes(mem.MemAvailable??mem.available)+' · 负载 '+(h.load?.[0]?.toFixed(2)??'—'),'fact-line'));
   card.append(node('p','上线以来网卡增量（含 VPN）：接收 '+bytes(s.traffic?.rx_bytes)+' / 发送 '+bytes(s.traffic?.tx_bytes),'fact-line'));
@@ -48,15 +45,15 @@ function charts(){
  }
 }
 function incidents(list){$('incident-list').replaceChildren();if(!list.length)$('incident-list').append(node('p','暂无故障记录。'));
- for(const i of list){const d=node('details',undefined,'event');d.append(node('summary',fmt(i.started_at)+' · '+i.source+'/'+i.target+' · '+(i.confirmed_at?'确认异常':'单次异常，未确认断链')+' · '+(i.recovered_at?'恢复于 '+fmt(i.recovered_at):'未确认恢复')));
+ for(const i of list){const d=node('details',undefined,'event');d.append(node('summary',fmt(i.started_at)+' · '+names[i.source]+' / '+metricName(i.target)+' · '+(i.confirmed_at?'确认异常':'单次异常，未确认断链')+' · '+(i.recovered_at?'恢复于 '+fmt(i.recovered_at):'未确认恢复')));
   const r=i.report||{};d.append(node('pre','已确认事实\n'+(r.facts||[]).join('\n')+'\n\n推断\n'+(r.inferences||[]).join('\n')+'\n\n缺失证据\n'+(r.missing||[]).join('\n')));
-  const b=node('button','下载诊断摘要与现存采样');b.onclick=async()=>{try{const data=await api('/api/evidence?id='+encodeURIComponent(i.id));const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));const a=node('a');a.href=url;a.download='incident-'+i.id+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}catch(e){$('health').textContent=e.message;}};d.append(b);$('incident-list').append(d);}
+  $('incident-list').append(d);}
 }
-async function load(){if(busy||!token||document.hidden)return;busy=true;try{
- const [latest,events,reports]=await Promise.all([api('/api/latest'),api('/api/incidents?since='+Math.floor(Date.now()/1000-30*86400)),api('/api/reports')]);
- for(let n=0;n<5;n++){const h=await api('/api/history?since='+Math.floor(Date.now()/1000-86400)+'&cursor='+cursor);history.push(...h.samples);cursor=h.cursor;if(!h.has_more)break;}
+async function load(){if(busy||document.hidden)return;busy=true;try{
+ const [latest,events]=await Promise.all([api('/latest'),api('/incidents')]);
+ if(Date.now()-lastHistory>=300000){const h=await api('/history');history=h.samples;lastHistory=Date.now();}
  history=history.filter(s=>s.captured_at>Date.now()/1000-86400);
- sourceCards(latest);charts();incidents(events.incidents);$('reports').replaceChildren();for(const r of reports.reports){const d=node('details',undefined,'event');d.append(node('summary',r.day+' · '+(r.sent_at?'邮件已提交':'等待发送')),node('pre',r.body));$('reports').append(d);}if(!reports.reports.length)$('reports').textContent='首份日报将在次日 09:00 生成。';
- $('health').textContent='同步于 '+fmt(latest.server_at)+' · 常规 120 秒采样，页面每 60 秒读取';lastLoad=Date.now();
+ sourceCards(latest);charts();incidents(events.incidents);
+ $('health').textContent='同步于 '+fmt(latest.server_at)+' · 常规 120 秒采样 · 摘要最多缓存 120 秒';lastLoad=Date.now();
  }catch(e){$('health').textContent=e.message+'；已有结果已过期，请看原采样时间。';}finally{busy=false;}}
-$('reload').onclick=load;document.addEventListener('visibilitychange',()=>{if(!document.hidden&&Date.now()-lastLoad>60000)load();});setInterval(load,60000);
+$('reload').onclick=load;document.addEventListener('visibilitychange',()=>{if(!document.hidden&&Date.now()-lastLoad>60000)load();});setInterval(load,60000);load();

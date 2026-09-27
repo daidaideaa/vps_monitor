@@ -82,7 +82,7 @@ export default {
   async fetch(request, env) {
     const path = new URL(request.url).pathname;
     if (env.STORAGE_RETIRED === 'true') {
-      if(request.method==='GET' && path==='/status.json')return Response.redirect('https://38.47.125.205/monitor/status.json',302);
+      if(request.method==='GET' && path==='/status.json')return Response.redirect('https://vps-monitor.daidaidefish.workers.dev/api/status',302);
       return new Response('Monitoring storage moved to the owner VPS',{status:410});
     }
     if (request.method === 'GET' && path === '/status.json') return env.STATUS.get(env.STATUS.idFromName('latest')).fetch(request);
