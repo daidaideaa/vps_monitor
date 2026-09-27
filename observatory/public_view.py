@@ -57,12 +57,13 @@ def latest(hub):
 
 def history(hub):
     # Fixed 24-hour range and five-minute buckets: no arbitrary private query surface.
+    since = latest(hub)['window_start']
     rows = hub.db.execute('''SELECT CAST(minute/300 AS INTEGER)*300,metric,SUM(good),SUM(bad),SUM(total_ms)
-        FROM rollups WHERE source='windows' AND minute>=? GROUP BY 1,2 ORDER BY 1''', (time.time()-86400,))
+        FROM rollups WHERE source='windows' AND minute>=? GROUP BY 1,2 ORDER BY 1''', (since,))
     samples = {}
     for at, metric, good, bad, total in rows:
         if metric not in ('vmiss.icmp','vmiss.tcp','vmiss.hy2','vmiss.vless'): continue
-        s = samples.setdefault(at, {'source': 'windows', 'captured_at': at, 'interval': 300, 'checks': {}})
+        s = samples.setdefault(at, {'source': 'windows', 'captured_at': max(at,since), 'interval': 300, 'checks': {}})
         # A bucket containing any failure is a gap rather than a misleading continuous line.
         s['checks'][metric] = {'state': 'fail' if bad else 'ok', 'ms': round(total/good,2) if good and not bad else None,
                               'good': good, 'bad': bad}

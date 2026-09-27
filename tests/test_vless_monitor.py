@@ -30,7 +30,9 @@ class VlessMonitor(unittest.TestCase):
             self.assertEqual(data['sources']['windows']['coverage']['regular_samples'],1)
             self.assertEqual(public_view.incidents(hub)['incidents'][0]['target'],'vmiss.hy2')
             metrics={k for s in public_view.history(hub)['samples'] for k in s['checks']}
-            self.assertEqual(metrics,{'vmiss.hy2','vmiss.vless'})
+            self.assertEqual(metrics,{'vmiss.vless'})
+            # Old protocol history remains stored, but cannot shift the new chart's range.
+            self.assertEqual(hub.db.execute("SELECT SUM(bad) FROM rollups WHERE metric='vmiss.hy2'").fetchone()[0],1)
             hub.close()
 
     def test_vless_failure_is_not_attributed_to_udp(self):
