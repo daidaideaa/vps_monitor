@@ -118,13 +118,20 @@ def handler_for(config, login):
                 origin=self.headers.get('Origin')
                 if origin and origin not in origins:return self.reply(403,{'error':'origin_denied'})
                 token=self.headers.get('Authorization','').removeprefix('Bearer ')
+                if config.get('public_dashboard') and path.startswith(('/auth/', '/api/')):
+                    return self.reply(410,{'error':'private_diagnostics_local_only'})
+                if config.get('public_dashboard') and path in ('/public/latest','/public/history','/public/incidents'):
+                    if self.command!='GET':return self.reply(405,{'error':'method_not_allowed'})
+                    from . import public_view
+                    hub=Hub(root/'hub.sqlite')
+                    return self.reply(200,getattr(public_view,path.rsplit('/',1)[1])(hub))
                 if path=='/status.json' and self.command=='GET':
                     store=Store(root/'telegram-state/stock.sqlite')
                     try:
                         data=snapshot(store)
                         health=data['collector'];at=health.get('checked_at',0)
                         if at and time.time()-at>360:health={**health,'state':'disconnected'}
-                        data['collector']={k:v for k,v in health.items() if k in ('state','checked_at','retry_at','last_event_at')}
+                        data['collector']={k:v for k,v in health.items() if k in ('state','checked_at','retry_at','last_event_at','sources')}
                         data['published_at']=datetime.fromtimestamp(at or config['started_at'],CST).isoformat()
                     finally:store.db.close()
                     return self.reply(200,data)

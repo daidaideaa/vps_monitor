@@ -28,7 +28,7 @@ test('only fixed products and public fields can be published',()=>{
 test('retired storage never reads or writes Durable Objects',async()=>{
   const env={STORAGE_RETIRED:'true',get STATUS(){throw Error('DO must not be accessed');}};
   const r=await gateway.fetch(new Request('https://gateway.invalid/status.json'),env);
-  assert.equal(r.status,302);assert.equal(r.headers.get('location'),'https://38.47.125.205/monitor/status.json');
+  assert.equal(r.status,302);assert.equal(r.headers.get('location'),'https://vps-monitor.daidaidefish.workers.dev/api/status');
   assert.equal((await gateway.fetch(request(snapshot()),env)).status,410);
 });
 

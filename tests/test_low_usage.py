@@ -139,6 +139,11 @@ class LowUsage(unittest.TestCase):
             t=req('/auth/verify',{'challenge':c['challenge'],'code':code},{'Origin':'https://owner.example'})['token']
             self.assertIn('windows',req('/api/latest',headers={'Authorization':'Bearer '+t})['sources'])
             with self.assertRaises(urllib.error.HTTPError):req('/api/latest',headers={'Authorization':'Bearer '+t,'Origin':'https://evil.example'})
+            config['public_dashboard']=True
+            for path in ['/public/latest','/public/history','/public/incidents']:self.assertIsInstance(req(path),dict)
+            for path in ['/api/latest','/api/evidence?id=x','/api/reports','/auth/request']:
+                with self.assertRaises(urllib.error.HTTPError) as e:req(path,headers={'Authorization':'Bearer '+t})
+                self.assertEqual(e.exception.code,410)
         finally:server.shutdown();server.server_close();login.pool.shutdown(wait=True)
 
 

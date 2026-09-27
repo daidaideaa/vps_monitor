@@ -7,7 +7,7 @@ import unicodedata
 from datetime import datetime, timezone, timedelta
 from decimal import Decimal
 from urllib.parse import urlsplit, parse_qs
-from .targets import TARGETS, public_target
+from .targets import TARGETS, VENDOR_SOURCES, public_target
 
 CST = timezone(timedelta(hours=8))
 
@@ -22,17 +22,20 @@ def parse_message(channel, message_id, text, event_at, urls=()):
     for target in TARGETS:
         if channel not in target['channels']:
             continue
-        if not any(alias in normalized for alias in target['aliases']):
+        series_coupon = (target['provider']=='VMISS' and channel in VENDOR_SOURCES
+                         and 'jp.tky.tri' in normalized and not re.search(r'except|excluding|不适用|除外',normalized)
+                         and bool(parse_coupon(text,event_at)))
+        if not any(alias in normalized for alias in target['aliases']) and not series_coupon:
             continue
         # A plan must appear in the message's product block, not an ad appended below another product.
         main = text.split('\n\n🔥')[0].lower()
-        if not any(alias in re.sub(r'\s+', ' ', main) for alias in target['aliases']):
+        if not any(alias in re.sub(r'\s+', ' ', main) for alias in target['aliases']) and not series_coupon:
             continue
         vendor_links = [urlsplit(u) for u in links if urlsplit(u).hostname in {target['host'], target['host'].removeprefix('www.') }]
         pids = [parse_qs(u.query).get('pid', [''])[0] for u in vendor_links]
         if any(pids) and target['pid'] not in pids:
             continue
-        if target['provider'] != 'DMIT' and not vendor_links:
+        if target['provider'] != 'DMIT' and channel not in VENDOR_SOURCES and not vendor_links:
             continue
         state, count = 'unknown', None
         quantities = re.findall(r'(?:库存|stock)\s*[:：]\s*(?:\d+\s*(?:→|->)\s*)?(\d+)\b', text, re.I)
@@ -43,6 +46,8 @@ def parse_message(channel, message_id, text, event_at, urls=()):
             count = int(quantities[-1]); state = 'available' if count else 'unavailable'
         elif re.search(r'#有货|Stock\s*:\s*有|✅[^\n]*(?:补货|有货)|🟢\s*∞|#Available', text, re.I):
             state = 'available'
+        if series_coupon and not any(alias in normalized for alias in target['aliases']):
+            state,count='unknown',None
         coupon = parse_coupon(text, event_at)
         if coupon:coupon['source_url']=f'https://t.me/{channel}/{message_id}'
         return {**public_target(target), 'status': state, 'stock': count,
@@ -133,6 +138,10 @@ def accept(store, product, baseline=False, now=None, channels=('telegram','email
     store.db.execute('INSERT OR REPLACE INTO messages VALUES(?,?,?,?,?)',
         (product['source'], product['message_id'], product['event_at'], product['content_hash'], json.dumps(product)))
     if previous and previous['event_at'] > product['event_at']:
+        # A historical vendor coupon may establish a missing baseline, never replace a newer coupon.
+        c=product.get('coupon');old=previous.get('coupon')
+        if c and (not old or c['observed_at']>old.get('observed_at',0)):
+            store.set('stock:'+product['id'],{**previous,'coupon':c})
         store.db.commit(); return False
     if product['status'] == 'unknown':
         # A coupon-only edit may update an available product without refreshing its stock timestamp.

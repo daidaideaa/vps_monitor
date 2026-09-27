@@ -8,7 +8,7 @@ import urllib.request
 from pathlib import Path
 from dotenv import dotenv_values
 from .store import Store
-from .targets import CHANNELS
+from .targets import CHANNELS, ADMIN_GROUPS, trusted_message
 from .stock import parse_message, accept, snapshot
 from .notify import drain_async
 
@@ -16,6 +16,7 @@ from .notify import drain_async
 async def run(config, login=False):
     from telethon import TelegramClient, events, errors
     from telethon.tl.functions.channels import JoinChannelRequest
+    from telethon.tl.types import ChannelParticipantsAdmins
     root = Path(config.get('STATE_DIR', '/var/lib/vps-observatory'))
     root.mkdir(parents=True, exist_ok=True)
     store = Store(root/'stock.sqlite',capture_evidence=False)
@@ -38,10 +39,14 @@ async def run(config, login=False):
                 await asyncio.sleep(exc.seconds+1)
     peers = {}
     entities = []
+    admin_ids = {}
     for name in CHANNELS:
         entity = await retry_flood(lambda:client.get_entity(name))
         peers[entity.id] = name
         entities.append(entity)
+        if name in ADMIN_GROUPS:
+            try:admin_ids[name]={u.id for u in await retry_flood(lambda:client.get_participants(entity,filter=ChannelParticipantsAdmins))}
+            except Exception:admin_ids[name]=set()
         if not store.get('joined:'+name):
             await retry_flood(lambda:client(JoinChannelRequest(entity)))
             store.set('joined:'+name, True)
@@ -49,6 +54,7 @@ async def run(config, login=False):
         chat = message.peer_id.channel_id if hasattr(message.peer_id, 'channel_id') else None
         if chat not in peers:
             return
+        if not trusted_message(peers[chat],message.sender_id,admin_ids.get(peers[chat],set()),bool(message.fwd_from),chat):return
         urls = [e.url for e in message.entities or [] if getattr(e, 'url', None)]
         at = (message.edit_date or message.date).timestamp()
         accepted=accept(store, parse_message(peers[chat], message.id, message.message or '', at, urls), baseline, channels=('email',))
@@ -60,29 +66,40 @@ async def run(config, login=False):
     # Read recent history, including edits, to recover interrupted sessions.
     first = not store.get('initialized')
     for peer in entities:
+        name=peers[peer.id]
+        baseline=first or (name not in ('hostmonit','vps_spiders','gcpcn') and not store.get('source_initialized:'+name))
         history = await retry_flood(lambda:client.get_messages(peer,limit=300))
         for message in sorted(history, key=lambda m: (m.edit_date or m.date, m.id)):
-            process(message, baseline=first)
-    if not store.get('targeted_baseline_done'):
+            process(message, baseline=baseline)
+        store.set('source_initialized:'+name,True)
+    if not store.get('targeted_baseline_v2'):
         # Busy channels can bury an exact plan beyond 300 posts. Bounded searches run once,
         # silently, rather than repeatedly rereading an entire channel or refreshing stock age.
-        searches={'hostmonit':['JP.TKY.TRI.Basic','Premium Mini'],
+        searches={'hostmonit':['JP.TKY.TRI.Basic','2213'],
                   'vps_spiders':['TYO.Pro.TINY'],'gcpcn':['JPN.Pulse.Nano']}
         for peer in entities:
-            for query in searches[peers[peer.id]]:
+            for query in searches.get(peers[peer.id],[]):
                 history=await retry_flood(lambda:client.get_messages(peer,limit=15,search=query))
                 for message in sorted(history,key=lambda m:(m.edit_date or m.date,m.id)):
                     process(message,baseline=True)
-        store.set('targeted_baseline_done',True)
+        store.set('targeted_baseline_v2',True)
     store.set('initialized', True)
     await retry_flood(client.catch_up)
     last_health = 0
     last_trim = 0
     delivery = None
+    next_admin_refresh=time.time()+3600
     while True:
+        if time.time()>=next_admin_refresh:
+            for entity in entities:
+                name=peers[entity.id]
+                if name in ADMIN_GROUPS:
+                    try:admin_ids[name]={u.id for u in await retry_flood(lambda:client.get_participants(entity,filter=ChannelParticipantsAdmins))}
+                    except Exception:admin_ids[name]=set()
+            next_admin_refresh=time.time()+3600
         if time.time()-last_health>=60:
             health = {'state': 'connected' if client.is_connected() else 'disconnected', 'checked_at': time.time(),
-                      'last_event_at':store.get('last_channel_event')}
+                      'last_event_at':store.get('last_channel_event'),'sources':CHANNELS}
             store.set('telegram_health', health);last_health=time.time()
         if delivery is None or delivery.done():
             if delivery: delivery.result()
