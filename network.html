@@ -10,7 +10,7 @@
 <section class="network-panel" aria-labelledby="history-title">
 <div class="section-top"><div><h2 id="history-title">最近 24 小时</h2><p id="coverage" class="small-note">正在读取历史…</p></div><span class="small-tag">5 分钟汇总</span></div>
 <div id="charts"></div>
-<div class="chart-key"><span><i class="key-line"></i>成功耗时</span><span><i class="key-fail"></i>该时段有失败</span><span><i class="key-gap"></i>缺测留空</span><span>三行分别缩放，单位均为 ms</span></div>
+<div class="chart-key"><span><i class="key-line"></i>成功耗时</span><span><i class="key-fail"></i>该时段有失败</span><span><i class="key-gap"></i>缺测留空</span><span>曲线与旁边统计使用同批历史，最多缓存 5 分钟；各行独立缩放，单位 ms</span></div>
 </section>
 <div class="detail-grid"><section class="network-panel" aria-labelledby="server-title"><div class="section-top"><h2 id="server-title">VMISS 服务端</h2><span id="server-freshness" class="small-note"></span></div><div id="server-metrics"></div></section><section class="network-panel" aria-labelledby="control-title"><div class="section-top"><h2 id="control-title">本地对照</h2><span id="local-freshness" class="small-note"></span></div><div id="controls"></div><p class="small-note">日常代理结果仅作对照，所用节点可能不是 VMISS。休眠、离线和缺测不计作探测失败。</p></section></div>
 <section class="network-panel" id="incidents"><div class="section-top"><div><h2>VMISS 异常记录</h2><p class="small-note">近 24 小时 · 连续三次失败才确认；持续异常只记一次，时长为采样估计。</p></div><span id="incident-count" class="small-tag"></span></div><div id="incident-list"></div></section>
