@@ -42,7 +42,7 @@ def email(config, body):
 
 def drain(store, config, senders=None):
     senders = senders or {'telegram': telegram, 'email': email}
-    rows = list(store.db.execute('SELECT id,channel,body,attempts FROM outbox WHERE sent IS NULL AND next_try<=? LIMIT 10', (time.time(),)))
+    rows = list(store.db.execute('SELECT id,channel,body,attempts FROM outbox WHERE sent IS NULL AND cancelled IS NULL AND next_try<=? LIMIT 10', (time.time(),)))
     for event_id, channel, body, attempts in rows:
         try:
             senders[channel](config, body)
@@ -62,7 +62,7 @@ def drain(store, config, senders=None):
 
 async def drain_async(store, config):
     # SQLite stays on its owner thread; remote delivery must not block channel events.
-    rows = list(store.db.execute('SELECT id,channel,body,attempts FROM outbox WHERE sent IS NULL AND next_try<=? LIMIT 10', (time.time(),)))
+    rows = list(store.db.execute('SELECT id,channel,body,attempts FROM outbox WHERE sent IS NULL AND cancelled IS NULL AND next_try<=? LIMIT 10', (time.time(),)))
     async def deliver(row):
         event_id, channel, body, attempts = row
         try:

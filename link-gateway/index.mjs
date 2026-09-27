@@ -62,6 +62,7 @@ function stub(env,source) {return env.PROBES.get(env.PROBES.idFromName(source));
 export default {async fetch(request,env) {
   const url=new URL(request.url),path=url.pathname;
   if(path==='/ingest' && request.method==='POST') {
+    if(env.MONITORING_PAUSED==='true') return json({error:'monitoring_paused'},503);
     const source=request.headers.get('X-Probe-Source');
     let tokens;try{tokens=JSON.parse(env.PROBE_TOKENS||'{}');}catch{return json({error:'unconfigured'},503);}
     if(!SOURCES.includes(source) || !await sameSecret(request.headers.get('Authorization'), 'Bearer '+(tokens[source]||''))) return json({error:'unauthorized'},401);
@@ -83,6 +84,7 @@ export default {async fetch(request,env) {
     return response;
   }
   if(!await authorized(request,env)) return json({error:'login_required',message:'请通过 Cloudflare Access 登录；登录配置未完成时不提供链路数据。'},401);
+  if(env.MONITORING_PAUSED==='true') return json({error:'monitoring_paused'},503);
   if(request.method!=='GET') return json({error:'method_not_allowed'},405);
   if(path==='/' || path==='/network' || path==='/network/') return new Response(page,{headers:{...H,'Content-Type':'text/html; charset=utf-8','Content-Security-Policy':"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'"}});
   if(path==='/network/api/latest') {
@@ -120,8 +122,10 @@ export default {async fetch(request,env) {
 }};
 
 export class ProbeStore {
-  constructor(ctx) {
+  constructor(ctx,env={}) {
     this.ctx=ctx;this.sql=ctx.storage.sql;
+    this.paused=env.MONITORING_PAUSED==='true';
+    if(this.paused) return;
     this.sql.exec('CREATE TABLE IF NOT EXISTS samples (boot TEXT,seq INTEGER,captured REAL,received REAL,body TEXT,PRIMARY KEY(boot,seq))');
     this.sql.exec('CREATE INDEX IF NOT EXISTS sample_time ON samples(captured)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS minutes (minute INTEGER,metric TEXT,n INTEGER,failed INTEGER,total REAL,lo REAL,hi REAL,PRIMARY KEY(minute,metric))');
@@ -132,6 +136,7 @@ export class ProbeStore {
   }
   rows(query,...args) {return [...this.sql.exec(query,...args)];}
   async fetch(request) {
+    if(this.paused) return json({error:'monitoring_paused'},503);
     const u=new URL(request.url),now=Date.now()/1000;
     if(u.pathname==='/collect-evidence') {
       const job=await request.json();
@@ -188,6 +193,8 @@ export class ProbeStore {
     return json({error:'not_found'},404);
   }
   async alarm() {
+    // A pending alarm may fire once after shutdown; do not write or reschedule it.
+    if(this.paused) return;
     const now=Date.now()/1000;
     this.sql.exec('DELETE FROM samples WHERE captured<?',now-7*86400);
     this.sql.exec('DELETE FROM minutes WHERE minute<?',now-30*86400);

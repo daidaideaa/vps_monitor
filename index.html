@@ -12,16 +12,16 @@
 </head>
 <body><div class="wrap">
 <header class="site-header"><a class="brand" href="./" aria-label="库存监控首页"><span class="brand-icon" aria-hidden="true"><i></i><i></i></span>库存观察 <span class="breadcrumb">东京</span></a><a class="repo-link" href="https://github.com/daidaideaa/vps_monitor" target="_blank" rel="noopener noreferrer">GitHub ↗</a></header>
-<nav class="monitor-info"><a href="./">库存</a> · <a href="https://vps-link-monitor.daidaidefish.workers.dev/network">链路（登录）</a> · <a href="https://vps-link-monitor.daidaidefish.workers.dev/network#incidents">故障记录（登录）</a></nav>
+<nav class="monitor-info"><a href="./">库存</a> · <a href="./network.html">链路（登录）</a> · <a href="./network.html#incidents">故障记录（登录）</a></nav>
 <section class="heading"><div><h1>东京 VPS 库存</h1><p class="subtitle">跟踪频道补货与优惠码，按消息原始时间展示。</p></div><span class="location"><span aria-hidden="true">◎</span> Telegram 频道观测</span></section>
-<div class="toolbar"><div id="overview" class="overview" role="status">正在读取结果…</div><div class="actions"><span id="refresh" class="refresh" title="页面每 15 秒读取已有的频道观测。">正在同步…</span><button id="reload" type="button" title="读取服务器已有结果，不触发商家查询"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M13 6a5 5 0 1 0 .1 4M13 2v4H9"/></svg>同步结果</button></div></div>
+<div class="toolbar"><div id="overview" class="overview" role="status">正在读取结果…</div><div class="actions"><span id="refresh" class="refresh" title="页面每 60 秒读取已有的频道观测。">正在同步…</span><button id="reload" type="button" title="读取服务器已有结果，不触发商家查询"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M13 6a5 5 0 1 0 .1 4M13 2v4H9"/></svg>同步结果</button></div></div>
 <main id="cards" class="grid" aria-label="商户库存"><div class="empty">正在读取最近一次检查结果。</div></main>
-<div class="monitor-info"><p>时间均为北京时间。页面每 15 秒刷新；频道报告超过 30 分钟显示“当前待确认”。</p><details><summary>库存与优惠码从哪里来？</summary><p>HostMonit、全球 VPS 余量监控、GCPCN 的新消息与编辑是本页的库存来源。频道发现商家变化可能存在延迟。优惠条款不完整时不推算折后价；最终库存、币种、周期及优惠以官网结算为准。历史消息仅用于建立基线，不会重新触发补货通知。</p></details></div>
+<div class="monitor-info"><p>时间均为北京时间。页面每 60 秒刷新；频道报告超过 30 分钟显示“当前待确认”。</p><details><summary>库存与优惠码从哪里来？</summary><p>HostMonit、全球 VPS 余量监控、GCPCN 的新消息与编辑是本页的库存来源。频道发现商家变化可能存在延迟。优惠条款不完整时不推算折后价；最终库存、币种、周期及优惠以官网结算为准。历史消息仅用于建立基线，不会重新触发补货通知。</p></details></div>
 <footer><p>独立监控，库存及购买信息以商家官网为准。</p><p>VMISS · GreenCloud · DMIT · GoMami</p></footer>
 </div>
 <script>
 // Public inventory only; no private network endpoints are fetched on this page.
-const VPS_API='https://jp-vps-status.daidaidefish.workers.dev/status.json';
+const VPS_API='https://38.47.125.205/monitor/status.json';
 const cards=document.getElementById('cards'),reload=document.getElementById('reload'),refresh=document.getElementById('refresh');
 const allowedHosts=new Set(['app.vmiss.com','greencloudvps.com','www.dmit.io','gomami.io']);
 const words={available:'有货',unavailable:'无货',unknown:'尚未确认'};
@@ -31,9 +31,10 @@ const targets=[
  {id:'dmit-tyo-pro-tiny',provider:'DMIT',source:'vps',product_name:'TYO.Pro.TINY',product_url:'https://www.dmit.io/cart.php?a=add&pid=138'},
  {id:'gomami-jpn-pulse-nano',provider:'GoMami',source:'vps',product_name:'JPN.Pulse.Nano',product_url:'https://gomami.io/cart.php?a=add&pid=13'},
 ];
-let latest=targets.map(target=>({...target,status:'unknown',last_confirmed:'unknown',last_checked:null,stock:null,check_interval_seconds:600,pending:true})),next=15,busy=false;
+let latest=targets.map(target=>({...target,status:'unknown',last_confirmed:'unknown',last_checked:null,stock:null,check_interval_seconds:600,pending:true})),next=60,busy=false;
+function collectorExplanation(collector){const state=collector?.state;if(state==='connected')return '监听正常，库存待确认';return ({awaiting_authorization:'需要重新授权 Telegram 独立会话',starting:'监听正在启动',disconnected:'监听正在重连，库存待确认',rate_limited:'频道请求限流等待，库存待确认',paused:'库存监听已暂停'})[state]||'监听状态待确认';}
 function normalize(data,source){
- if(data?.schema_version===3&&Array.isArray(data.products))return data.products.map(p=>({...p,channel:p.source,last_checked:p.event_at?new Date(p.event_at*1000).toISOString():null,check_interval_seconds:600,unknown_count:0,explanation:data.collector?.state==='awaiting_authorization'?'等待完成 Telegram 独立会话授权':'当前待确认',telegram:true}));
+ if(data?.schema_version===3&&Array.isArray(data.products))return data.products.map(p=>({...p,channel:p.source,last_checked:p.event_at?new Date(p.event_at*1000).toISOString():null,check_interval_seconds:600,unknown_count:0,explanation:collectorExplanation(data.collector),telegram:true}));
  if(data&&[1,2].includes(data.schema_version)&&Array.isArray(data.products))return data.products;
  if(source==='vps'&&data&&data.schema_version===1&&!data.products&&(!data.provider||data.provider==='VMISS'))return [{...data,id:'vmiss-jp-tky-tri-basic',provider:'VMISS'}];
  throw new Error('Data');
@@ -56,7 +57,7 @@ function productState(item){
  const supplied=Number(item.check_interval_seconds),interval=Number.isFinite(supplied)&&supplied>=30?supplied:600;
  const stale=!Number.isFinite(checked)||seconds>interval*3||seconds < -120;
  const awaitingFirst=item.last_checked===null&&item.status==='unknown'&&item.last_confirmed==='unknown'&&item.unknown_count===0;
- const state=item.sourceFailed?'offline':item.pending||awaitingFirst?'unknown':stale?'stale':item.status;
+ const state=item.sourceFailed?'offline':item.pending||awaitingFirst?'unknown':stale?(item.telegram?'unknown':'stale'):item.status;
  return {state,checked,seconds,interval};
 }
 function safeLink(value){try{const url=new URL(value);return url.protocol==='https:'&&allowedHosts.has(url.hostname)?url.href:'#';}catch(e){return '#';}}
@@ -126,8 +127,8 @@ async function loadSource(source,url){
 async function load(){
  if(busy)return;busy=true;reload.disabled=true;refresh.textContent='正在同步…';
  try{const ok=await loadSource('vps',VPS_API);refresh.textContent=ok?'页面同步于 '+new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(Date.now()):'同步失败，稍后重试';}
- finally{busy=false;reload.disabled=false;next=15;}
+ finally{busy=false;reload.disabled=false;next=60;}
 }
 draw();
-reload.addEventListener('click',load);load();setInterval(()=>{if(!busy&&--next<=0)load();},1000);
+reload.addEventListener('click',load);load();setInterval(()=>{if(!document.hidden&&!busy&&--next<=0)load();},1000);
 </script></body></html>

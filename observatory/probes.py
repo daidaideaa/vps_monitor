@@ -69,8 +69,16 @@ def https(url,proxy=None,bind=None):
     code=int(parts[0])
     return {'state':'ok' if 200<=code<400 else 'fail','ms':round(float(parts[1])*1000,2),'http_status':code}
 
+_cpu_previous = None
+
 def linux_host(services):
+    global _cpu_previous
     host={}
+    fields=list(map(int,Path('/proc/stat').read_text().splitlines()[0].split()[1:9]))
+    total=sum(fields);idle=fields[3]+fields[4]
+    if _cpu_previous and total>_cpu_previous[0]:host['cpu_percent']=round(100*(1-(idle-_cpu_previous[1])/(total-_cpu_previous[0])),1)
+    else:host['cpu_percent']=None
+    _cpu_previous=(total,idle)
     host['load']=list(os.getloadavg())
     mem={l.split(':')[0]:int(l.split()[1])*1024 for l in Path('/proc/meminfo').read_text().splitlines()}
     host['memory']={k:mem[k] for k in ('MemTotal','MemAvailable','SwapTotal','SwapFree')}

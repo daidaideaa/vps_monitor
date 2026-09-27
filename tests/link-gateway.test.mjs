@@ -13,6 +13,16 @@ const now=()=>Date.now()/1000;
 function sample(seq,at=now()) {return {source:'windows',boot_id:'test-boot',seq,captured_at:at,monotonic_ms:seq*1000,
   checks:{'vmiss.hy2':{state:'ok',ms:20,new:true},'gateway.icmp':{state:'error'}}};}
 const ingest=(s,samples,incidents=[])=>s.fetch(new Request('https://internal/ingest',{method:'POST',body:JSON.stringify({source:'windows',samples,incidents})}));
+
+test('paused monitoring makes no database calls and never reschedules alarms',async()=>{
+  const forbidden=()=>{throw Error('storage must remain untouched while paused');};
+  const env={MONITORING_PAUSED:'true',PROBES:{get:forbidden,idFromName:forbidden}};
+  assert.equal((await worker.fetch(new Request('https://x/ingest',{method:'POST'}),env)).status,503);
+  assert.equal((await worker.fetch(new Request('https://x/network/api/evidence'),env)).status,401);
+  const object=new ProbeStore({storage:{sql:{exec:forbidden},setAlarm:forbidden}},env);
+  assert.equal((await object.fetch(new Request('https://internal/ingest',{method:'POST'}))).status,503);
+  await object.alarm();
+});
 test('all reads, evidence and alternate preview hosts fail closed without Access',async()=>{
   for(const host of ['main.workers.dev','preview.main.workers.dev'])for(const path of ['/','/network','/network/api/latest','/network/api/history','/network/api/evidence','/network/api/incidents'])
     assert.equal((await worker.fetch(new Request('https://'+host+path),{})).status,401);

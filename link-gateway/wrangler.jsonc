@@ -10,5 +10,5 @@
   "rules": [{"type": "Text", "globs": ["**/*.html"], "fallthrough": true}],
   "durable_objects": {"bindings": [{"name": "PROBES", "class_name": "ProbeStore"}]},
   "migrations": [{"tag": "v1", "new_sqlite_classes": ["ProbeStore"]}],
-  "vars": {"ALLOWED_EMAIL": "daidaidefish@gmail.com"}
+  "vars": {"ALLOWED_EMAIL": "daidaidefish@gmail.com", "MONITORING_PAUSED": "true"}
 }
