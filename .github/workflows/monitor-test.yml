@@ -28,6 +28,6 @@ jobs:
         working-directory: vmiss-stock-monitor
         run: python -m pytest -q
       - name: Access, SQL replay, public schema and pages
-        run: node --experimental-loader ./tests/html-loader.mjs --test tests/link-gateway.test.mjs tests/gateway.test.mjs tests/frontend.test.cjs tests/public-edge.test.mjs
+        run: node --experimental-loader ./tests/html-loader.mjs --test tests/link-gateway.test.mjs tests/gateway.test.mjs tests/frontend.test.cjs tests/public-edge.test.mjs tests/network.test.cjs
       - name: Build public allowlisted assets
         run: node scripts/build_public.mjs

@@ -142,10 +142,11 @@ class Hub:
         stats={}
         for source,metric,good,bad,total,max_ms in self.db.execute('''SELECT source,metric,SUM(good),SUM(bad),SUM(total_ms),MAX(max_ms)
                     FROM rollups WHERE minute>=? AND minute<? GROUP BY source,metric''',(start,end)):
+            if metric.startswith('home.'):continue
             stats.setdefault(source,{})[metric]={'good':good,'bad':bad,'success_percent':round(100*good/(good+bad),2),
                                                'mean_ms':round(total/good,2) if good else None,'max_ms':max_ms}
         incidents=self.incidents(start-30*86400)
-        counts={source:sum(i['source']==source and bool(i.get('confirmed_at')) and start<=i['started_at']<end for i in incidents)
+        counts={source:sum(i['source']==source and not i.get('target','').startswith('home.') and bool(i.get('confirmed_at')) and start<=i['started_at']<end for i in incidents)
                 for source in ('windows','vmiss')}
         return {'regular_checks':stats,'confirmed_incidents':counts,'start':start,'end':end}
 
@@ -164,6 +165,7 @@ class Hub:
             if row:
                 s=json.loads(row[0]);lines.append('资源/监控预算/上传：'+json.dumps({k:s.get(k) for k in ('host','budget','upload')},ensure_ascii=False)[:2000])
         for i in self.incidents(start-30*86400):
+            if i.get('target','').startswith('home.'):continue
             if i.get('confirmed_at') and i['started_at']<end and (i.get('recovered_at') or end)>start:
                 duration=max(0,min(end,i.get('recovered_at') or end)-max(start,i['started_at']))
                 lines.append(f"异常 {i['source']}/{i['target']}: 本日估计 {duration:.0f} 秒；"+('已恢复' if i.get('recovered_at') else '未确认恢复'))

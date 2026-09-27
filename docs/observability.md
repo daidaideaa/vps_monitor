@@ -2,7 +2,9 @@
 
 ## 当前架构
 
-GitHub Pages 与可选 Cloudflare 静态入口仅提供公开页面。库存、公开摘要 API、SQLite 与邮件队列集中在 VMISS；Windows 保留本机探测。日本家宽只作为 Windows 的暂时被测目标，其监控服务与 Komari 均暂停。
+GitHub Pages 与可选 Cloudflare 静态入口仅提供公开页面。库存、公开摘要 API、SQLite 与邮件队列集中在 VMISS；Windows 只主动探测 VMISS，保留网关、国内及日常代理作为对照。日本家宽目标已停用，历史私下保留；其监控服务与 Komari 均暂停。
+
+链路页只显示 VMISS。最近 24 小时图表按实际已有记录的时间段展开，ICMP、TCP、HY2 分行呈现，各自使用标明的纵轴与同一时间轴。失败画底部标记，缺测断开，单独成功点仍可见；确认异常计数仅含 VMISS 独立 HY2，不混入退役目标及日常代理。原始取证与日志保留策略不变。
 
 - 公开读取入口：`https://vps-monitor.daidaidefish.workers.dev/api/status` 和 `/api/network/latest`、`history`、`incidents`。GitHub Pages 与 Worker 静态页面均免登录。
 - VMISS 只通过 `/monitor/public/latest`、`history`、`incidents` 构造白名单摘要：时间、数值型指标、固定状态枚举和通用故障结论。原始网络清单、IP、订阅/节点名称、自由文本日志、邮件正文和凭据均不进入公开 API。

@@ -11,6 +11,27 @@ from observatory.store import Store
 
 
 class PublicView(unittest.TestCase):
+    def test_retired_target_and_daily_client_do_not_inflate_vmiss_events(self):
+        with tempfile.TemporaryDirectory() as d:
+            hub=Hub(Path(d)/'hub.sqlite');now=time.time()-10
+            sample={'source':'windows','boot_id':'test','seq':0,'captured_at':now,'interval':120,
+                    'checks':{k:{'state':'fail','kind':'regular'} for k in ('home.hy2','vmiss.hy2','client.http')}}
+            events=[{'id':key,'source':'windows','target':key,'started_at':now,'confirmed_at':now}
+                    for key in ('home.hy2','vmiss.hy2','client.http')]
+            hub.ingest('windows',{'samples':[sample],'incidents':events})
+            latest=public_view.latest(hub)
+            self.assertEqual(latest['statistics']['confirmed_incidents']['windows'],1)
+            self.assertNotIn('home.hy2',hub.statistics(now-60,now+60)['regular_checks']['windows'])
+            self.assertNotIn('home.hy2',latest['sources']['windows']['sample']['checks'])
+            self.assertNotIn('home.hy2',latest['statistics']['regular_checks']['windows'])
+            self.assertEqual(latest['sources']['windows']['coverage']['regular_samples'],1)
+            self.assertEqual([i['target'] for i in public_view.incidents(hub)['incidents']],['vmiss.hy2'])
+            history=public_view.history(hub)['samples']
+            self.assertEqual(set(history[0]['checks']),{'vmiss.hy2'})
+            self.assertEqual(history[0]['checks']['vmiss.hy2']['bad'],1)
+            self.assertIsNone(history[0]['checks']['vmiss.hy2']['ms'])
+            hub.close()
+
     def test_public_projection_never_copies_raw_fields_or_strings(self):
         with tempfile.TemporaryDirectory() as d:
             hub=Hub(Path(d)/'hub.sqlite');now=time.time();secret='SECRET_203.0.113.9_password'
