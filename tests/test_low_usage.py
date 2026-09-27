@@ -113,7 +113,8 @@ class LowUsage(unittest.TestCase):
         logs=self.root/'logs';logs.mkdir()
         old=datetime.fromtimestamp(self.now-7200,timezone.utc).isoformat()
         recent=datetime.fromtimestamp(self.now-30,timezone.utc).isoformat()
-        (logs/'core-test.log').write_text(f'time="{old}" VMISS old failure\ntime="{recent}" VMISS recent failure\n',encoding='utf-8')
+        future=datetime.fromtimestamp(self.now+7200,timezone.utc).isoformat()
+        (logs/'core-test.log').write_text(f'time="{old}" VMISS old failure\ntime="{recent}" VMISS recent failure\ntime="{future}" VMISS future failure\nVMISS missing timestamp\n',encoding='utf-8')
         with patch('observatory.probes.WINDOWS',True):result=log_events({'client_root':str(self.root)})
         self.assertEqual(len(result),1);self.assertIn('recent failure',result[0])
     def test_api_enforces_private_reads_and_per_source_ingest(self):
