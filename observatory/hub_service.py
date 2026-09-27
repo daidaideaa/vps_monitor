@@ -169,6 +169,8 @@ def maintenance(config):
     root=Path(config['state_dir']);now=time.time();local=datetime.fromtimestamp(now,CST)
     hub=Hub(root/'hub.sqlite');outbox=Store(root/'notifications.sqlite')
     try:
+        from .probes import log_events
+        hub.correlate(lambda incident:log_events({'services':['vmiss-hy2.service']},window=incident))
         first=datetime.fromtimestamp(config['started_at'],CST).date()
         last=local.date()-timedelta(days=1)
         if local.hour>=9:

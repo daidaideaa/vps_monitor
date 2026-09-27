@@ -23,6 +23,7 @@ class Hub:
           total_ms REAL,max_ms REAL,PRIMARY KEY(source,minute,metric));
         CREATE TABLE IF NOT EXISTS reports(day TEXT PRIMARY KEY,body TEXT,sent REAL);
         CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,body TEXT);
+        CREATE TABLE IF NOT EXISTS correlations(incident TEXT PRIMARY KEY,body TEXT,finalized INTEGER);
         ''')
 
     def ingest(self, source, data, now=None):
@@ -112,8 +113,30 @@ class Hub:
         if not row:return None
         i=json.loads(row[0]); rows=self.db.execute('SELECT body FROM samples WHERE source=? AND captured BETWEEN ? AND ? ORDER BY captured',
                                                 (i['source'],i['started_at']-600,i['end_at']))
-        return {'incident':i,'samples':[json.loads(r[0]) for r in rows],
+        samples=[json.loads(r[0]) for r in rows]
+        correlation=self.db.execute('SELECT body FROM correlations WHERE incident=?',(ident,)).fetchone()
+        related=[]
+        if i['source']=='windows' and i['target'].startswith('vmiss.'):
+            related=[json.loads(r[0]) for r in self.db.execute('SELECT body FROM samples WHERE source=\'vmiss\' AND captured BETWEEN ? AND ? ORDER BY captured',
+                                                            (i['started_at']-600,i['end_at']))]
+        return {'incident':i,'samples':samples,'related_server_samples':related,
+                'server_log_excerpt':json.loads(correlation[0]) if correlation else {'state':'not_available'},
                 'notice':'原始采样仅保留 7 天，窗口可能因缺测或裁剪而不完整。'}
+
+    def correlate(self, reader, now=None):
+        now=now or time.time()
+        for i in self.incidents(now-1800):
+            if i['source']!='windows' or not i['target'].startswith('vmiss.'):continue
+            old=self.db.execute('SELECT body,finalized FROM correlations WHERE incident=?',(i['id'],)).fetchone()
+            if old and (old[1] or now<i['end_at']):continue
+            try:
+                logs=reader(i)[-10:]
+                value={'state':'complete' if now>=i['end_at'] else 'initial','source':'vmiss-hy2.service journal',
+                       'window_start':i['started_at']-600,'window_end':i['end_at'],
+                       'excerpt':[str(line)[:400] for line in logs]}
+            except Exception as exc:value={'state':'unavailable','reason':type(exc).__name__}
+            with self.db:self.db.execute('INSERT OR REPLACE INTO correlations VALUES(?,?,?)',
+                (i['id'],json.dumps(value,ensure_ascii=False),int(now>=i['end_at'])))
 
     def statistics(self, start, end):
         stats={}
@@ -155,6 +178,7 @@ class Hub:
             self.db.execute('DELETE FROM rollups WHERE minute<?',(now-30*86400,))
             self.db.execute('DELETE FROM incidents WHERE started<?',(now-30*86400,))
             self.db.execute('DELETE FROM reports WHERE day<?',((datetime.fromtimestamp(now,CST)-timedelta(days=30)).date().isoformat(),))
+            self.db.execute('DELETE FROM correlations WHERE incident NOT IN (SELECT id FROM incidents)')
             while self.db.execute('SELECT COALESCE(SUM(length(body)),0) FROM incidents').fetchone()[0]>10*1024*1024:
                 self.db.execute('DELETE FROM incidents WHERE id IN (SELECT id FROM incidents ORDER BY started LIMIT 20)')
         self.db.execute('PRAGMA wal_checkpoint(TRUNCATE)')

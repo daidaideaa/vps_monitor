@@ -72,6 +72,23 @@ class LowUsage(unittest.TestCase):
         s=self.sample();s['checks']['vmiss.hy2']['new']=False
         self.hub.ingest('windows',{'samples':[s]})
         self.assertEqual(self.hub.db.execute('SELECT COUNT(*) FROM rollups').fetchone()[0],0)
+    def test_server_logs_are_collected_twice_and_not_replaced_by_client(self):
+        i={'id':'fault','source':'windows','target':'vmiss.hy2','started_at':self.now,'end_at':self.now+300}
+        self.hub.ingest('windows',{'samples':[self.sample()],'incidents':[i]})
+        calls=[]
+        def read(incident):calls.append(incident['id']);return ['no recent network activity']
+        self.hub.correlate(read,self.now);self.hub.correlate(read,self.now+100)
+        self.hub.ingest('windows',{'incidents':[i]})
+        self.hub.correlate(read,self.now+301);self.hub.correlate(read,self.now+400)
+        self.assertEqual(calls,['fault','fault'])
+        self.assertEqual(self.hub.evidence('fault')['server_log_excerpt']['state'],'complete')
+    def test_combined_budget_steps_down_at_most_once_a_day(self):
+        s=self.sample();s['budget']={'monthly_estimate_bytes':700_000_000}
+        self.hub.ingest('windows',{'samples':[s]},self.now)
+        s['source']='vmiss';self.hub.ingest('vmiss',{'samples':[s]},self.now)
+        self.assertEqual(self.hub.budget_control(self.now+86401)['level'],1)
+        self.assertEqual(self.hub.budget_control(self.now+86500)['level'],1)
+        self.assertEqual(self.hub.budget_control(self.now+172802)['level'],2)
     def test_stock_email_only_and_cancel_legacy_backlog(self):
         p=parse_message('hostmonit',1,'JP.TKY.TRI.Basic\n库存：1\nhttps://app.vmiss.com/cart.php?pid=101',self.now)
         accept(self.store,p,channels=('email',));accept(self.store,p,channels=('email',))
