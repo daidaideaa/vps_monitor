@@ -154,9 +154,10 @@ footer p { margin: 0; }
 .coupon-box{margin:18px 0;padding:18px 20px;background:#f5f7f2;border:1px solid #dfe5d7;border-radius:12px}
 .coupon-kicker{font-size:12px;color:#596b4c;margin-bottom:12px}
 .coupon-code-line{display:flex;align-items:center;justify-content:space-between;gap:12px}
-.coupon-code{font:700 25px/1.3 ui-monospace,monospace;letter-spacing:.03em;color:#283d1d;overflow-wrap:anywhere;user-select:all}
-.coupon-copy{padding:7px 12px;border:1px solid #c8d2bf;border-radius:7px;background:white;white-space:nowrap;cursor:pointer}
+.coupon-code{font:700 25px/1.3 Consolas,"Courier New",monospace;letter-spacing:.03em;color:#283d1d;overflow-wrap:anywhere;user-select:all}
+.coupon-copy{padding:7px 12px;border:1px solid #c8d2bf;border-radius:7px;background:white;color:#283d1d;white-space:nowrap;cursor:pointer}
+.coupon-copy:hover{background:#e8eddf}
 .coupon-meta{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:17px}
-.coupon-meta .value{font-size:13px!important}.coupon-caution,.coupon-empty{font-size:12px;color:#716754;line-height:1.6;margin:12px 0 0}
+.coupon-meta .fact{display:block}.coupon-meta .value{font-size:13px!important;margin-top:5px}.coupon-caution,.coupon-empty{font-size:12px;color:#716754;line-height:1.6;margin:12px 0 0}
 .coupon-price{font-size:14px;font-weight:600}.coupon-terms{margin-top:12px;font-size:12px;line-height:1.7;color:#67705f}
 .coupon-terms summary{cursor:pointer}.coupon-terms p{white-space:pre-wrap;overflow-wrap:anywhere;max-height:170px;overflow:auto}
