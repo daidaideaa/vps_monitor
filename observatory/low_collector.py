@@ -165,6 +165,18 @@ def main():
                         s['last_log_verify']=now
                         if 'client.http' in incidents.states:incidents.save()
                         due['client.http']=now
+            manual=root/'manual-trigger'
+            if manual.exists():
+                try:marked=float(manual.read_text())
+                except ValueError:marked=now
+                manual.unlink()
+                if now-store.get('last_manual_marker',0)>=300:
+                    i={'id':str(uuid.uuid4()),'source':config['source'],'target':'manual.client','manual':True,
+                       'started_at':min(now,max(now-600,marked)),'end_at':now+300,'status':'collecting',
+                       'confirmed_at':None,'recovered_at':None,'evidence':{'mode':'low_frequency','pre_seconds':600,'post_seconds':300},
+                       'report':{'facts':['用户手动标记故障时间；不计作一次实际探测失败。'],'inferences':['待定位。'],'missing':[]}}
+                    store.incident(i);store.set('last_manual_marker',now);append({},'manual')
+                    if probes.WINDOWS:due['client.http']=now
             selected={k:v for k,v in jobs().items() if due.get(k,float('inf'))<=now}
             for key in selected:due.pop(key,None)
             if selected:execute(selected,'retry')
