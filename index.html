@@ -104,7 +104,7 @@ function planFor(item){
     box.append(el('p','coupon-caution',c.observed_at&&Date.now()/1000-c.observed_at>30*86400?'历史优惠，当前有效性待确认':'以官网结算为准'));
     if(c.terms){const detail=el('details','coupon-terms');detail.append(el('summary','','查看来源条款'),el('p','',c.terms));box.append(detail);}
    }else box.append(el('p','coupon-empty','暂未找到适用且未过期的优惠码'));
-   extra.append(box);
+   plan.append(box);
    if(/^https:\/\/t\.me\/(hostmonit|vps_spiders|gcpcn|dmitnews|vmiss_com|vmisscom|gomaminetworks)\/\d+$/.test(item.source_url||'')){const link=el('a','buy-link','查看来源消息 ↗');link.href=item.source_url;link.target='_blank';link.rel='noopener noreferrer';extra.append(link);}
    if(valid&&c.source_url!==item.source_url&&/^https:\/\/t\.me\/(hostmonit|vps_spiders|gcpcn|dmitnews|vmiss_com|vmisscom|gomaminetworks)\/\d+$/.test(c.source_url||'')){const link=el('a','buy-link','查看优惠来源 ↗');link.href=c.source_url;link.target='_blank';link.rel='noopener noreferrer';extra.append(link);}
    plan.append(extra,actionFor(item));return plan;
