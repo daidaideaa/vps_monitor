@@ -55,3 +55,16 @@ test('public read is separate from authenticated publishing, with no merchant re
   const older=snapshot();older.published_at=new Date(Date.parse(checkedAt)-60000).toISOString();
   assert.equal((await gateway.fetch(request(older),e)).status,409);
 });
+
+function v3(){return {schema_version:3,published_at:new Date().toISOString(),collector:{state:'awaiting_authorization'},products:[
+ ['vmiss-jp-tky-tri-basic','app.vmiss.com'],['greencloud-tokyo-premium-mini','greencloudvps.com'],['dmit-tyo-pro-tiny','www.dmit.io'],['gomami-jpn-pulse-nano','gomami.io']
+ ].map(([id,host])=>({id,product_url:'https://'+host+'/',status:'unknown',stock:null,event_at:null,prices:[],coupon:null,private_link:'SECRET_SENTINEL'}))};}
+test('v3 only exposes four public products; nested unexpected fields are stripped',()=>{
+ const value=v3();value.private_link='SECRET_SENTINEL';value.products[0].coupon={code:'TEST',terms:'annual',source_url:'https://t.me/hostmonit/1',private_link:'SECRET_SENTINEL'};
+ const result=publicSnapshot(value);assert.equal(result.products.length,4);assert.ok(!JSON.stringify(result).includes('SECRET_SENTINEL'));
+ value.products[0].source_url='https://evil.invalid/';assert.throws(()=>publicSnapshot(value));
+});
+test('v3 rollout refuses an old v2 publisher overwriting current products',async()=>{
+ const e=env();assert.equal((await gateway.fetch(request(v3()),e)).status,204);
+ assert.equal((await gateway.fetch(request(snapshot()),e)).status,409);
+});

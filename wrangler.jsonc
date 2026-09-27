@@ -1,0 +1,10 @@
+{
+  "name": "vps-monitor",
+  "account_id": "b8df9390d0a7639d399e7f3aaeea589d",
+  "compatibility_date": "2026-09-21",
+  "workers_dev": true,
+  "preview_urls": false,
+  "send_metrics": false,
+  "build": {"command": "node scripts/build_public.mjs"},
+  "assets": {"directory": ".local/public-site"}
+}

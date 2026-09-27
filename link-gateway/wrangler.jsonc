@@ -1,0 +1,14 @@
+{
+  "name": "vps-link-monitor",
+  "account_id": "b8df9390d0a7639d399e7f3aaeea589d",
+  "main": "index.mjs",
+  "compatibility_date": "2026-09-21",
+  "workers_dev": true,
+  "preview_urls": false,
+  "send_metrics": false,
+  "observability": {"enabled": false},
+  "rules": [{"type": "Text", "globs": ["**/*.html"], "fallthrough": true}],
+  "durable_objects": {"bindings": [{"name": "PROBES", "class_name": "ProbeStore"}]},
+  "migrations": [{"tag": "v1", "new_sqlite_classes": ["ProbeStore"]}],
+  "vars": {"ALLOWED_EMAIL": "daidaidefish@gmail.com"}
+}

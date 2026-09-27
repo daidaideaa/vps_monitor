@@ -15,4 +15,9 @@ generated/
 .venv/
 .pytest_cache/
 *.key
+*.session
+*.session-journal
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
 *.pem

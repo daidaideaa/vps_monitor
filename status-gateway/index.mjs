@@ -7,7 +7,46 @@ const targets = new Map([
 // Accept an old publisher during deployment, but never expose retired products.
 const retired = new Set(['vps-tokyo-cloud-starter', 'vps-tokyo-cloud-essential']);
 const fields = ['id', 'provider', 'product_name', 'product_url', 'status', 'last_confirmed', 'last_checked', 'unknown_count', 'stock', 'explanation', 'check_interval_seconds', 'query_location', 'check_interval_min_seconds', 'check_interval_max_seconds', 'last_available_at', 'unavailable_since'];
+const currentTargets = new Map([
+  ['vmiss-jp-tky-tri-basic','app.vmiss.com'],['greencloud-tokyo-premium-mini','greencloudvps.com'],
+  ['dmit-tyo-pro-tiny','www.dmit.io'],['gomami-jpn-pulse-nano','gomami.io'],
+]);
+function price(p) {
+  if(!p || !/^\d{1,8}(\.\d{1,3})?$/.test(p.amount) || !['USD','CAD','币种待确认'].includes(p.currency) ||
+    !['月','季','半年','年','2年'].includes(p.cycle)) throw Error('Invalid price');
+  return {amount:p.amount,currency:p.currency,cycle:p.cycle};
+}
+export function versionThree(data) {
+  if(!Array.isArray(data.products) || data.products.length!==4 || !Number.isFinite(Date.parse(data.published_at)) ||
+     Date.parse(data.published_at)>Date.now()+120000) throw Error('Invalid snapshot');
+  const seen=new Set();
+  const products=data.products.map(p=>{
+    if(!currentTargets.has(p.id)||seen.has(p.id)||!['available','unavailable','unknown'].includes(p.status))throw Error('Invalid product');
+    seen.add(p.id);
+    const url=new URL(p.product_url);
+    if(url.protocol!=='https:'||url.host!==currentTargets.get(p.id)||url.username||url.password)throw Error('Invalid URL');
+    if(p.source_url && !/^https:\/\/t\.me\/(hostmonit|vps_spiders|gcpcn)\/[0-9]+$/.test(p.source_url))throw Error('Invalid source');
+    if(p.event_at!==null && (!Number.isFinite(p.event_at)||p.event_at>Date.now()/1000+120))throw Error('Invalid observation time');
+    const text=(v,max=120)=>typeof v==='string'?v.slice(0,max):null;
+    let coupon=null;
+    if(p.coupon) {
+      const c=p.coupon;
+      if(!/^[A-Za-z0-9][A-Za-z0-9_%.-]{1,90}$/.test(c.code))throw Error('Invalid coupon');
+      coupon={code:c.code,cycle:text(c.cycle,20),recurring:c.recurring===true,expires_at:Number.isFinite(c.expires_at)?c.expires_at:null,
+        terms:text(c.terms,240),validity:c.validity==='expired'?'expired':'source_reported',
+        discounted:c.discounted?price(c.discounted):null,observed_at:Number.isFinite(c.observed_at)?c.observed_at:null,
+        source_url:/^https:\/\/t\.me\/(hostmonit|vps_spiders|gcpcn)\/[0-9]+$/.test(c.source_url||'')?c.source_url:null};
+    }
+    return {id:p.id,provider:text(p.provider),product_name:text(p.product_name),product_url:url.href,status:p.status,
+      stock:Number.isSafeInteger(p.stock)&&p.stock>=0?p.stock:null,event_at:p.event_at,source_url:p.source_url||null,
+      source:text(p.source,32),last_confirmed:['available','unavailable'].includes(p.last_confirmed)?p.last_confirmed:'unknown',
+      stale:p.stale===true,coupon,prices:Array.isArray(p.prices)?p.prices.slice(0,8).map(price):[]};
+  });
+  return {schema_version:3,published_at:data.published_at,products,
+    collector:{state:['connected','disconnected','awaiting_authorization'].includes(data.collector?.state)?data.collector.state:'unknown'}};
+}
 export function publicSnapshot(data) {
+  if(data?.schema_version===3)return versionThree(data);
   if (data?.schema_version !== 2 || data.query_location !== 'japan-home-vps' || !Array.isArray(data.products) || data.products.length > targets.size + retired.size || !Number.isFinite(Date.parse(data.published_at)) || Date.parse(data.published_at) > Date.now()+120000) throw Error('Invalid snapshot');
   const active = data.products.filter(p => !retired.has(p?.id));
   if (active.length !== targets.size) throw Error('Missing active product');
@@ -27,6 +66,7 @@ export class StatusSnapshot {
     if (request.method === 'PUT') {
       const data = await request.json();
       const old = await this.state.storage.get('latest');
+      if(old?.schema_version===3 && data.schema_version!==3)return new Response('Legacy publisher retired',{status:409});
       // A corrected server clock must be able to replace an invalid future snapshot.
       if (old && Date.parse(old.published_at) <= Date.now()+120000 && Date.parse(data.published_at) < Date.parse(old.published_at)) return new Response('Older snapshot', {status:409});
       await this.state.storage.put('latest',data);

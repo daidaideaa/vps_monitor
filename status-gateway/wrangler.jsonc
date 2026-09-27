@@ -1,5 +1,6 @@
 {
   "name": "jp-vps-status",
+  "account_id": "b8df9390d0a7639d399e7f3aaeea589d",
   "main": "index.mjs",
   "compatibility_date": "2026-09-21",
   "workers_dev": true,
