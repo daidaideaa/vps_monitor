@@ -20,6 +20,8 @@ jobs:
         run: pip install -r observatory/requirements.txt -r vmiss-stock-monitor/requirements.txt
       - name: Parsers, notifications, evidence and legacy compatibility
         run: python -m unittest discover -s tests -p 'test_*.py'
+      - name: Linux UDP direction and filter regression
+        run: sudo "$(command -v python)" -m unittest discover -s tests -p 'test_udp_metadata.py'
       - name: Legacy offline tests
         run: python -m playwright install --with-deps chromium
       - name: Legacy offline DOM fixtures
