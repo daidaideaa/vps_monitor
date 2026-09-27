@@ -4,7 +4,7 @@ import {publicRead} from '../public-edge.mjs';
 test('fixed public endpoints cache reads and never forward private paths or origin failures',async()=>{
  const map=new Map(),cache={match:async r=>map.get(r.url)?.clone(),put:async(r,v)=>map.set(r.url,v)};
  const tasks=[],ctx={waitUntil:p=>tasks.push(p)},env={MONITOR_ORIGIN:'https://private-origin.invalid/monitor'};let calls=0;
- const fetcher=async url=>{calls++;assert.equal(url,env.MONITOR_ORIGIN+'/public/latest');return Response.json({sources:{}});};
+ const fetcher=async (url,options)=>{calls++;assert.equal(url,env.MONITOR_ORIGIN+'/public/latest');assert.equal(options.redirect,'manual');return Response.json({sources:{}});};
  for(let i=0;i<2;i++){
   const r=await publicRead(new Request('https://edge.invalid/api/network/latest'),env,ctx,cache,fetcher);
   assert.equal(r.status,200);await Promise.all(tasks);
@@ -14,4 +14,6 @@ test('fixed public endpoints cache reads and never forward private paths or orig
   assert.notEqual((await publicRead(new Request('https://edge.invalid'+path),env,ctx,cache,fetcher)).status,200);
  const fail=await publicRead(new Request('https://edge.invalid/api/network/history'),env,ctx,cache,async()=>new Response('SECRET_IP',{status:500}));
  assert.equal(fail.status,503);assert.ok(!(await fail.text()).includes('SECRET'));
+ const redirect=await publicRead(new Request('https://edge.invalid/api/network/history'),env,ctx,cache,async()=>Response.redirect('https://private-origin.invalid',302));
+ assert.equal(redirect.status,503);assert.equal(redirect.headers.get('Location'),null);
 });

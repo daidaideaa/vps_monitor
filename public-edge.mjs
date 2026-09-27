@@ -16,7 +16,7 @@ export async function publicRead(request, env, ctx, cache = caches.default, fetc
   if (found) return found;
   try {
     if (!env.MONITOR_ORIGIN) throw Error('not_configured');
-    const upstream = await fetcher(env.MONITOR_ORIGIN+route[0], {redirect:'error',signal:AbortSignal.timeout(8000),
+    const upstream = await fetcher(env.MONITOR_ORIGIN+route[0], {redirect:'manual',signal:AbortSignal.timeout(8000),
       headers:{'Accept':'application/json'}});
     if (!upstream.ok) throw Error('upstream_status_'+upstream.status);
     const body = await upstream.text();
