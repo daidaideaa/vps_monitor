@@ -1,15 +1,18 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>链路概览 · VPS 观察</title><link rel="stylesheet" href="./assets/fonts/typography.css"><link rel="stylesheet" href="./assets/site.css"><link rel="stylesheet" href="./assets/network.css"></head>
-<body><div class="wrap">
-<header class="site-header"><a class="brand" href="./">VPS 观察 <span class="breadcrumb">链路概览</span></a></header>
-<nav class="monitor-info"><a href="./">库存</a> · <a href="./network.html">链路</a> · <a href="#incidents">故障记录</a></nav>
-<section class="heading"><div><h1>链路与故障</h1><p class="subtitle">每 120 秒观测。异常快速复核，日报统一汇总。</p></div></section>
-<div id="public">
-<div class="toolbar"><p id="health" role="status">正在同步…</p><button id="reload">同步结果</button></div>
-<p class="monitor-info">时间均为北京时间。后台缺测不算丢包；服务不可达时保留页面已有结果并标记过期。页面隐藏后暂停读取。此页免登录，公开摘要不含 IP、密码、订阅、节点名称或原始日志。</p>
-<div id="sources" class="grid"></div>
-<section class="panel chart-panel"><h2>最近 24 小时</h2><div id="charts"></div><p class="monitor-info">ICMP 是往返延迟；TCP 是建连耗时；HY2 是完整请求耗时。仅连接有效样本，失败与缺测处留空。</p></section>
-<section class="panel" id="incidents"><h2>故障记录</h2><p class="monitor-info">同一指标持续异常归为一次。单次失败、确认异常和日志提示分开展示；公开展示起止时间和探测结论，详细诊断保存在本机与服务器。</p><div id="incident-list"></div></section>
-<section class="panel"><h2>邮件日报</h2><p class="monitor-info">每天 09:00 汇总前一天，断连和恢复不逐次发信。</p><p class="monitor-info">详细报告发往你的邮箱；公开页面不展示邮件正文。</p></section>
-</div><footer>数据存于 VMISS。监控流量估计与网卡总流量分别展示，不等同于商家账单。</footer>
-</div><script src="./assets/network.js"></script></body></html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>VMISS 链路 · VPS 观察</title><link rel="stylesheet" href="./assets/fonts/typography.css"><link rel="stylesheet" href="./assets/site.css"><link rel="stylesheet" href="./assets/network.css"></head>
+<body class="network-page"><div class="wrap">
+<header class="site-header"><a class="brand" href="./">VPS 观察 <span class="breadcrumb">VMISS</span></a><nav class="network-nav" aria-label="主导航"><a href="./">库存</a><a href="./network.html" aria-current="page">链路</a><a href="#incidents">故障记录</a></nav></header>
+<main>
+<section class="network-heading"><div><p class="eyebrow">WINDOWS → VMISS · JAPAN</p><h1>VMISS 链路</h1><p class="subtitle">延迟、探测异常与服务状态，一页查看。</p></div><button id="reload" type="button">同步结果 ↻</button></section>
+<div class="sync-line"><span id="health" role="status">正在读取采样…</span><span>每 120 秒采样 · 北京时间</span></div>
+<section id="overview" class="metric-grid" aria-label="链路摘要"></section>
+<p class="context-note">这里观测的是电脑到 VMISS 的独立 HY2 探针；确认异常次数不等于日常代理断连次数。</p>
+<section class="network-panel" aria-labelledby="history-title">
+<div class="section-top"><div><h2 id="history-title">最近 24 小时</h2><p id="coverage" class="small-note">正在读取历史…</p></div><span class="small-tag">5 分钟汇总</span></div>
+<div id="charts"></div>
+<div class="chart-key"><span><i class="key-line"></i>成功耗时</span><span><i class="key-fail"></i>该时段有失败</span><span><i class="key-gap"></i>缺测留空</span><span>三行分别缩放，单位均为 ms</span></div>
+</section>
+<div class="detail-grid"><section class="network-panel" aria-labelledby="server-title"><div class="section-top"><h2 id="server-title">VMISS 服务端</h2><span id="server-freshness" class="small-note"></span></div><div id="server-metrics"></div></section><section class="network-panel" aria-labelledby="control-title"><div class="section-top"><h2 id="control-title">本地对照</h2><span id="local-freshness" class="small-note"></span></div><div id="controls"></div><p class="small-note">日常代理结果仅作对照，所用节点可能不是 VMISS。休眠、离线和缺测不计作探测失败。</p></section></div>
+<section class="network-panel" id="incidents"><div class="section-top"><div><h2>VMISS 异常记录</h2><p class="small-note">近 24 小时 · 连续三次失败才确认；持续异常只记一次，时长为采样估计。</p></div><span id="incident-count" class="small-tag"></span></div><div id="incident-list"></div></section>
+<details class="network-panel accounting"><summary>监控消耗与通知设置</summary><div id="accounting"></div><p class="small-note">每 120 秒采样；页面可见时每 60 秒同步，隐藏后暂停。断连和恢复不逐次发信，每天 09:00 发日报；补货仍即时邮件通知。</p></details>
+</main><footer>仅公开脱敏指标，IP、凭据及原始日志留在本机与服务器。</footer></div><script src="./assets/network.js"></script></body></html>

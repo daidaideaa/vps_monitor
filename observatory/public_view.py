@@ -3,10 +3,11 @@ import math
 import time
 
 SOURCES = ('windows', 'vmiss')
-METRICS = ('gateway.icmp', 'china.icmp', 'home.icmp', 'home.tcp', 'home.hy2',
+METRICS = ('gateway.icmp', 'china.icmp',
            'vmiss.icmp', 'vmiss.tcp', 'vmiss.hy2', 'client.http', 'egress.https',
            'egress.dns', 'vmiss-hy2.service')
 STATES = ('ok', 'fail', 'unknown', 'error')
+TARGETS = ('vmiss.hy2', 'vmiss-hy2.service')
 
 
 def number(value):
@@ -20,6 +21,8 @@ def check(value):
 
 def latest(hub):
     raw = hub.latest(); sources = {}; stats = {'regular_checks': {}, 'confirmed_incidents': {}}
+    since = raw['server_at'] - 86400
+    events = [i for i in hub.incidents(since) if i.get('target') in TARGETS]
     for source in SOURCES:
         entry = raw['sources'][source]; sample = entry.get('sample')
         if not sample:
@@ -36,7 +39,11 @@ def latest(hub):
             'upload': {'state': 'ok' if sample.get('upload', {}).get('state') == 'ok' else 'pending'}}}
         stats['regular_checks'][source] = {k: {f: number(v.get(f)) for f in ('good', 'bad', 'mean_ms')}
             for k, v in raw['statistics']['regular_checks'].get(source, {}).items() if k in METRICS}
-        stats['confirmed_incidents'][source] = number(raw['statistics']['confirmed_incidents'].get(source, 0))
+        stats['confirmed_incidents'][source] = sum(i.get('source') == source and bool(i.get('confirmed_at')) for i in events)
+        row = hub.db.execute('''SELECT MIN(minute),MAX(minute),SUM(good+bad) FROM rollups
+            WHERE source=? AND metric=? AND minute>=?''',
+            (source, 'vmiss.hy2' if source == 'windows' else 'vmiss-hy2.service', since)).fetchone()
+        sources[source]['coverage'] = {'first_at': number(row[0]), 'last_at': number(row[1]), 'regular_samples': number(row[2]) or 0}
     return {'server_at': raw['server_at'], 'sources': sources, 'statistics': stats}
 
 
@@ -46,17 +53,18 @@ def history(hub):
         FROM rollups WHERE source='windows' AND minute>=? GROUP BY 1,2 ORDER BY 1''', (time.time()-86400,))
     samples = {}
     for at, metric, good, bad, total in rows:
-        if metric not in ('home.icmp','home.tcp','home.hy2','vmiss.icmp','vmiss.tcp','vmiss.hy2'): continue
+        if metric not in ('vmiss.icmp','vmiss.tcp','vmiss.hy2'): continue
         s = samples.setdefault(at, {'source': 'windows', 'captured_at': at, 'interval': 300, 'checks': {}})
         # A bucket containing any failure is a gap rather than a misleading continuous line.
-        s['checks'][metric] = {'state': 'fail' if bad else 'ok', 'ms': round(total/good,2) if good and not bad else None}
+        s['checks'][metric] = {'state': 'fail' if bad else 'ok', 'ms': round(total/good,2) if good and not bad else None,
+                              'good': good, 'bad': bad}
     return {'samples': list(samples.values()), 'bucket_seconds': 300, 'server_at': time.time()}
 
 
 def incidents(hub):
     result = []
     for i in hub.incidents(time.time()-30*86400)[:100]:
-        if i.get('source') not in SOURCES or i.get('target') not in (*METRICS, 'manual.client'): continue
+        if i.get('source') not in SOURCES or i.get('target') not in TARGETS: continue
         result.append({'source': i['source'], 'target': i['target'], 'manual': i.get('manual') is True,
             **{k: number(i.get(k)) for k in ('started_at','confirmed_at','recovered_at')},
             'report': {'facts': ['手动标记故障时间。' if i.get('manual') else
