@@ -23,7 +23,12 @@ function chartSeries(samples,metric,start,end) {
  }
  flush();return {segments,failed,ceiling,points};
 }
-if(typeof module!=='undefined')module.exports={recentEvents,historyRange,chartSeries};
+function chartStats(points) {
+ let total=0,good=0,bad=0;
+ for(const {v} of points){bad+=v.bad??(v.state==='fail'?1:0);if(v.state==='ok'&&Number.isFinite(v.ms)){const n=v.good??1;total+=v.ms*n;good+=n;}}
+ return {mean_ms:good?total/good:null,bad};
+}
+if(typeof module!=='undefined')module.exports={recentEvents,historyRange,chartSeries,chartStats};
 if(typeof document!=='undefined'){
 const API='https://vps-monitor.daidaidefish.workers.dev/api/network';
 let history=[],busy=false,lastLoad=0,lastHistory=0;
@@ -69,14 +74,14 @@ function details(data){
 }
 function svgNode(tag,attrs,text){const n=document.createElementNS('http://www.w3.org/2000/svg',tag);for(const [k,v] of Object.entries(attrs))n.setAttribute(k,String(v));if(text!==undefined)n.textContent=text;return n;}
 function charts(data){
- const now=data.server_at,range=historyRange(history.filter(s=>s.captured_at>=Math.floor((data.window_start||0)/300)*300),now),count=data.sources.windows?.coverage?.regular_samples;
+ const now=data.server_at,range=historyRange(history.filter(s=>s.captured_at>=Math.floor((data.window_start||0)/300)*300),now),count=history.filter(s=>s.captured_at>=range.start).reduce((n,s)=>{const v=s.checks?.['vmiss.'+protocol];return n+(v?(v.good||0)+(v.bad||0):0);},0);
  $('coverage').textContent=range.hasData?'图示 '+fmt(range.start,true)+' — '+clock(range.end)+' · 记录跨度 '+duration(range.end-range.start)+(count!=null?' · '+count+' 次常规采样':'')+'；未满 24 小时，按已有时段展开。':'尚无可用历史；缺测不计作丢包。';
  if(range.end-range.start>=85800)$('coverage').textContent='图示 '+fmt(range.start,true)+' — '+fmt(range.end,true)+' · 最近 24 小时；缺测留空。';
  $('charts').replaceChildren();
  for(const [index,metric] of VMISS_METRICS.entries()){
-  const model=chartSeries(history,metric,range.start,range.end),stats=data.statistics.regular_checks.windows?.[metric],row=node('div',undefined,'chart-row');row.style.setProperty('--series',['#4b83ad','#4b8975','#af7748'][index]);
+  const model=chartSeries(history,metric,range.start,range.end),stats=chartStats(model.points),row=node('div',undefined,'chart-row');row.style.setProperty('--series',['#4b83ad','#4b8975','#af7748'][index]);
   const info=node('div',undefined,'chart-info'),title=node('h3',undefined,'chart-title');title.append(node('i',undefined,'chart-dot'),node('span',names[metric]));
-  info.append(title,node('p',['往返延迟','管理端口建连耗时','完整请求耗时'][index],'chart-description'),node('p','均值 '+ms(stats?.mean_ms)+' ms · 失败 '+(stats?.bad??'—')+' 次','chart-stat'));
+  info.append(title,node('p',['往返延迟','管理端口建连耗时','完整请求耗时'][index],'chart-description'),node('p','曲线均值 '+ms(stats?.mean_ms)+' ms · 失败 '+(stats?.bad??'—')+' 次','chart-stat'));
   const plot=node('div',undefined,'plot-wrap'),shell=node('div',undefined,'plot-shell'),yaxis=node('div',undefined,'y-axis');
   yaxis.append(node('span',String(model.ceiling)),node('span',String(model.ceiling/2)),node('span','0'));
   const svg=svgNode('svg',{viewBox:'0 0 660 100',preserveAspectRatio:'none',class:'latency-plot',role:'img','aria-label':names[metric]+' '+clock(range.start)+' 至 '+clock(range.end)+'，均值 '+ms(stats?.mean_ms)+' 毫秒'});
