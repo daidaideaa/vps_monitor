@@ -19,8 +19,14 @@ def capture(host,seconds=12,limit=120,port=None):
         instructions=(Filter*9)(Filter(0x30,0,0,9),Filter(0x15,0,5,17),Filter(0xb1,0,0,0),
             Filter(0x48,0,0,0),Filter(0x15,3,0,port),Filter(0x48,0,0,2),Filter(0x15,1,0,port),
             Filter(0x06,0,0,0),Filter(0x06,0,0,96))
+    # ETH_P_ALL is required for the kernel's outgoing packet taps. Restrict
+    # non-IPv4 frames in BPF before reading the IPv4 protocol and addresses.
+    body=instructions
+    instructions=(Filter*(len(body)+3))(
+        Filter(0x30,0,0,0),Filter(0x54,0,0,0xf0),
+        Filter(0x15,0,len(body)-1,0x40),*body)
     program=Program(len(instructions),instructions);records=[];start=time.time()
-    with socket.socket(socket.AF_PACKET,socket.SOCK_DGRAM,socket.htons(0x0800)) as sock:
+    with socket.socket(socket.AF_PACKET,socket.SOCK_DGRAM,socket.htons(0x0003)) as sock:
         library=ctypes.CDLL(None,use_errno=True)
         if library.setsockopt(sock.fileno(),socket.SOL_SOCKET,26,ctypes.byref(program),ctypes.sizeof(program))!=0:
             raise OSError(ctypes.get_errno(),'attach_target_filter_failed')
@@ -36,8 +42,9 @@ def capture(host,seconds=12,limit=120,port=None):
             if address and address not in (src,dst):continue
             sport,dport,length,_=struct.unpack('!HHHH',data[ihl:ihl+8])
             if port and port not in (sport,dport):continue
-            records.append({'at':time.time(),'interface':nic[0],'direction':'in' if (dport==port if port else src==address) else 'out',
+            records.append({'at':time.time(),'interface':nic[0],'direction':'out' if nic[2]==socket.PACKET_OUTGOING else 'in',
                 'src':src,'dst':dst,'sport':sport,'dport':dport,'udp_bytes':length})
         packets,drops=struct.unpack('II',sock.getsockopt(263,6,8))
-    return {'tool':'AF_PACKET/BPF','state':'ok','target':address,'started_at':start,'ended_at':time.time(),
+    return {'tool':'AF_PACKET/BPF','capture_version':2,'direction_source':'sockaddr_ll.packet_type',
+        'state':'ok','target':address,'started_at':start,'ended_at':time.time(),
         'packets_seen':packets,'capture_drops':drops,'headers':records,'payload_persisted':False}

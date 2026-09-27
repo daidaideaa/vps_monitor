@@ -105,8 +105,9 @@ def run(binary):
                 sender.sendto(b'OTHER_PORT',('127.0.0.1',udp+1 if udp<65535 else udp-1))
             data=meta.result(timeout=5)
             assert data['headers'] and all(udp in (r['sport'],r['dport']) for r in data['headers'])
+            assert {r['direction'] for r in data['headers']}=={'in','out'},data
             assert 'PAYLOAD_MUST_NOT_PERSIST' not in json.dumps(data) and data['payload_persisted'] is False
-            result['checks']['udp_metadata']={'headers_captured':len(data['headers']),'target_filter_verified':True,'payload_persisted':False}
+            result['checks']['udp_metadata']={'headers_captured':len(data['headers']),'target_filter_verified':True,'directions_verified':['in','out'],'capture_version':data['capture_version'],'payload_persisted':False}
             result['status']='passed';result['finished_at']=time.time();return result
         finally:
             for child in children:

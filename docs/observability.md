@@ -44,6 +44,8 @@ Worker 对所有 GET 独立验证签名、issuer、audience、email、expiry；�
 
 日常告警：首次失败触发 10 分钟历史冻结和 5 分钟尾部采集，每目标 10 分钟冷却；连续 3 次失败、2 次成功分别入队告警与恢复。Windows 故障通过各节点独立上报通道请求服务端关联证据。历史故障收到的取证请求只能补取日志，无法补造当时 UDP 元数据。服务器丢弃、OOM、出口 DNS 等保留事实，未能确认的层面标记待定位。
 
+Linux UDP 采集 `capture_version: 2` 使用 ETH_P_ALL 接收发送方向副本，再由内核 BPF 限定 IPv4 UDP 与目标，方向采用内核 sockaddr_ll.packet_type。此前没有版本标记的采集会漏记发送方向，不能用来证明服务器未发送响应。新增回环回归验证双向记录、目标过滤与无载荷持久化；Linux CI 使用 CAP_NET_RAW 所需权限运行。[Linux packet 接口说明](https://man7.org/linux/man-pages/man7/packet.7.html)
+
 Windows 使用同一 Gmail 服务的 SSL 465 端口，VPS 使用 STARTTLS 587，均校验证书。电脑完全离线时本地队列待恢复发送。当前客户端没有选择 VMISS 时，页面明确列出真实订阅及选中节点。
 
 仍需真实用户操作验收：Access 登录、Telegram 会话与实时送达、管理员 PktMon、Windows 重启/休眠及实际 TUN/订阅切换。避免为验收打断日常代理或重启用户电脑。
