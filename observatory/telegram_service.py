@@ -18,6 +18,9 @@ async def run(config, login=False):
     from telethon.tl.functions.channels import JoinChannelRequest
     root = Path(config.get('STATE_DIR', '/var/lib/vps-observatory'))
     root.mkdir(parents=True, exist_ok=True)
+    store = Store(root/'stock.sqlite',capture_evidence=False)
+    store.cancel_legacy_notifications()
+    store.set('telegram_health',{'state':'starting','checked_at':time.time()})
     client = TelegramClient(str(root/'telegram'), int(config['TELEGRAM_API_ID']), config['TELEGRAM_API_HASH'], catch_up=True)
     if login:
         await client.start()
@@ -25,8 +28,8 @@ async def run(config, login=False):
         await client.disconnect(); return
     await client.connect()
     if not await client.is_user_authorized():
+        store.set('telegram_health',{'state':'awaiting_authorization','checked_at':time.time()})
         raise RuntimeError('Run --login interactively before starting the service')
-    store = Store(root/'stock.sqlite')
     async def retry_flood(fn):
         while True:
             try:return await fn()
@@ -48,7 +51,8 @@ async def run(config, login=False):
             return
         urls = [e.url for e in message.entities or [] if getattr(e, 'url', None)]
         at = (message.edit_date or message.date).timestamp()
-        accept(store, parse_message(peers[chat], message.id, message.message or '', at, urls), baseline)
+        accepted=accept(store, parse_message(peers[chat], message.id, message.message or '', at, urls), baseline, channels=('email',))
+        if accepted and not baseline:store.set('last_channel_event',time.time())
     @client.on(events.NewMessage(chats=entities))
     @client.on(events.MessageEdited(chats=entities))
     async def received(event):
@@ -59,31 +63,31 @@ async def run(config, login=False):
         history = await retry_flood(lambda:client.get_messages(peer,limit=300))
         for message in sorted(history, key=lambda m: (m.edit_date or m.date, m.id)):
             process(message, baseline=first)
+    if not store.get('targeted_baseline_done'):
+        # Busy channels can bury an exact plan beyond 300 posts. Bounded searches run once,
+        # silently, rather than repeatedly rereading an entire channel or refreshing stock age.
+        searches={'hostmonit':['JP.TKY.TRI.Basic','Premium Mini'],
+                  'vps_spiders':['TYO.Pro.TINY'],'gcpcn':['JPN.Pulse.Nano']}
+        for peer in entities:
+            for query in searches[peers[peer.id]]:
+                history=await retry_flood(lambda:client.get_messages(peer,limit=15,search=query))
+                for message in sorted(history,key=lambda m:(m.edit_date or m.date,m.id)):
+                    process(message,baseline=True)
+        store.set('targeted_baseline_done',True)
     store.set('initialized', True)
     await retry_flood(client.catch_up)
-    last_publish = None
+    last_health = 0
     last_trim = 0
     delivery = None
-    def publish(data):
-        request = urllib.request.Request(config['STATUS_PUBLISH_URL'], data=json.dumps(data).encode(), method='PUT',
-            headers={'Authorization': 'Bearer '+config['STATUS_PUBLISH_TOKEN'], 'Content-Type': 'application/json',
-                'User-Agent':'vps-observatory/1.0 (+https://github.com/daidaideaa/vps_monitor)'})
-        with urllib.request.urlopen(request, timeout=10) as response:
-            if response.status != 204: raise RuntimeError('publish_failed')
     while True:
-        health = {'state': 'connected' if client.is_connected() else 'disconnected', 'checked_at': time.time()}
-        store.set('telegram_health', health)
+        if time.time()-last_health>=60:
+            health = {'state': 'connected' if client.is_connected() else 'disconnected', 'checked_at': time.time(),
+                      'last_event_at':store.get('last_channel_event')}
+            store.set('telegram_health', health);last_health=time.time()
         if delivery is None or delivery.done():
             if delivery: delivery.result()
             delivery = asyncio.create_task(drain_async(store, config))
-        data = snapshot(store)
-        digest = json.dumps(data['products'], sort_keys=True)
-        if digest != last_publish or time.time()-store.get('last_publish', 0) > 60:
-            try:
-                await asyncio.to_thread(publish, data)
-                last_publish = digest; store.set('last_publish', time.time())
-            except Exception as exc:
-                print('Stock publish:', type(exc).__name__, flush=True)
+        # The VPS API reads this database. No cloud publication or periodic merchant request.
         if time.time()-last_trim > 3600:
             store.trim(max_bytes=20*1024*1024); last_trim = time.time()
         await asyncio.sleep(2)

@@ -81,6 +81,10 @@ export class StatusSnapshot {
 export default {
   async fetch(request, env) {
     const path = new URL(request.url).pathname;
+    if (env.STORAGE_RETIRED === 'true') {
+      if(request.method==='GET' && path==='/status.json')return Response.redirect('https://38.47.125.205/monitor/status.json',302);
+      return new Response('Monitoring storage moved to the owner VPS',{status:410});
+    }
     if (request.method === 'GET' && path === '/status.json') return env.STATUS.get(env.STATUS.idFromName('latest')).fetch(request);
     if (request.method !== 'PUT' || path !== '/publish') return new Response('Not found',{status:404});
     if (!env.PUBLISH_TOKEN || request.headers.get('Authorization') !== `Bearer ${env.PUBLISH_TOKEN}`) return new Response('Unauthorized',{status:401});

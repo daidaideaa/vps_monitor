@@ -119,7 +119,7 @@ def notification(product, kind='补货'):
     return '\n'.join(lines+[f"库存消息：{product['source_url']}", f"官网：{product['product_url']}"])
 
 
-def accept(store, product, baseline=False, now=None):
+def accept(store, product, baseline=False, now=None, channels=('telegram','email')):
     if product is None:
         return False
     now = now or time.time()
@@ -145,10 +145,10 @@ def accept(store, product, baseline=False, now=None):
         product['coupon']=previous['coupon']
     old_coupon = (previous or {}).get('coupon') or {}
     new_coupon = product.get('coupon') or {}
-    kind = '补货' if not previous or previous['status'] != 'available' else '优惠更新' if (
+    kind = '补货' if not previous or previous['status'] != 'available' or now-previous['event_at']>1800 else '优惠更新' if (
         new_coupon.get('code') and new_coupon.get('code') != old_coupon.get('code') and new_coupon.get('validity') != 'expired') else None
     if not baseline and kind and product['status'] == 'available' and now-product['event_at'] <= 1800:
-        store.enqueue(f"stock:{product['id']}:{product['source']}:{product['message_id']}:{product['content_hash']}", notification(product, kind))
+        store.enqueue(f"stock:{product['id']}:{product['source']}:{product['message_id']}:{product['content_hash']}", notification(product, kind),channels=channels)
     store.set('stock:'+product['id'], product)
     return True
 
@@ -158,7 +158,7 @@ def snapshot(store, now=None):
     for target in TARGETS:
         value = store.get('stock:'+target['id'])
         item = {**public_target(target), 'status': 'unknown', 'stock': None, 'event_at': None,
-                'source_url': None, 'coupon': None, 'prices': [], 'last_confirmed': 'unknown'}
+                'source_url': None, 'source':target['channels'][0], 'coupon': None, 'prices': [], 'last_confirmed': 'unknown'}
         if value:
             item.update({k: value[k] for k in ('status', 'stock', 'event_at', 'source_url', 'source', 'coupon', 'prices')})
             item['last_confirmed'] = value['status']

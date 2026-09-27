@@ -6,6 +6,7 @@
   "workers_dev": true,
   "preview_urls": false,
   "send_metrics": false,
+  "vars": {"STORAGE_RETIRED": "true"},
   "observability": {"enabled": false},
   "durable_objects": {"bindings": [{"name": "STATUS", "class_name": "StatusSnapshot"}]},
   "migrations": [{"tag": "v1", "new_sqlite_classes": ["StatusSnapshot"]}]

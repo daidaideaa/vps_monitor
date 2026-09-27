@@ -25,6 +25,13 @@ test('only fixed products and public fields can be published',()=>{
   const future=snapshot();future.published_at=new Date(Date.now()+3600000).toISOString();assert.throws(()=>publicSnapshot(future));
 });
 
+test('retired storage never reads or writes Durable Objects',async()=>{
+  const env={STORAGE_RETIRED:'true',get STATUS(){throw Error('DO must not be accessed');}};
+  const r=await gateway.fetch(new Request('https://gateway.invalid/status.json'),env);
+  assert.equal(r.status,302);assert.equal(r.headers.get('location'),'https://38.47.125.205/monitor/status.json');
+  assert.equal((await gateway.fetch(request(snapshot()),env)).status,410);
+});
+
 test('legacy stored and incoming snapshots never expose retired V.PS products',async()=>{
   const legacy=snapshot();
   legacy.products.push({id:'vps-tokyo-cloud-starter',product_url:'https://vps.hosting/',status:'available'},

@@ -6,7 +6,8 @@ from pathlib import Path
 
 
 class Store:
-    def __init__(self, path):
+    def __init__(self, path, capture_evidence=True):
+        self.capture_evidence = capture_evidence
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(path)
@@ -24,6 +25,9 @@ class Store:
           CREATE TABLE IF NOT EXISTS incident_evidence(incident TEXT,boot TEXT,seq INTEGER,body TEXT,
              PRIMARY KEY(incident,boot,seq));
         ''')
+        if 'cancelled' not in {r[1] for r in self.db.execute('PRAGMA table_info(outbox)')}:
+            self.db.execute('ALTER TABLE outbox ADD COLUMN cancelled REAL')
+            self.db.commit()
 
     def get(self, key, default=None):
         row = self.db.execute('SELECT body FROM state WHERE key=?', (key,)).fetchone()
@@ -36,7 +40,7 @@ class Store:
     def add_sample(self, sample):
         self.db.execute('INSERT INTO samples(captured,body) VALUES(?,?)',
                         (sample['captured_at'], json.dumps(sample, ensure_ascii=False)))
-        for incident in self.incidents():
+        for incident in self.incidents() if self.capture_evidence else []:
             if incident['started_at']-600 <= sample['captured_at'] <= incident['end_at']:
                 self.db.execute('INSERT OR IGNORE INTO incident_evidence VALUES(?,?,?,?)',
                     (incident['id'],sample['boot_id'],sample['seq'],json.dumps(sample,ensure_ascii=False)))
@@ -57,6 +61,7 @@ class Store:
             'SELECT body FROM samples WHERE captured BETWEEN ? AND ? ORDER BY captured', (start, end))]
 
     def incident(self, incident):
+        incident['updated_at'] = time.time()
         # Bound every cloud incident below its 64 KiB envelope. Never hide truncation.
         if len(json.dumps(incident,ensure_ascii=False).encode())>60000:
             evidence=incident.setdefault('evidence',{})
@@ -66,7 +71,7 @@ class Store:
             incident.setdefault('report',{}).setdefault('missing',[]).append('诊断附件超过单条上限，已裁剪；前后采样独立保存。')
         self.db.execute('INSERT OR REPLACE INTO incidents VALUES(?,?,?)',
                         (incident['id'], json.dumps(incident, ensure_ascii=False), time.time()))
-        for s in self.window(incident['started_at']-600, incident['end_at']):
+        for s in self.window(incident['started_at']-600, incident['end_at']) if self.capture_evidence else []:
             self.db.execute('INSERT OR IGNORE INTO incident_evidence VALUES(?,?,?,?)',
                 (incident['id'],s['boot_id'],s['seq'],json.dumps(s,ensure_ascii=False)))
         self.db.commit()
@@ -80,6 +85,10 @@ class Store:
             body+='\n记录时间：'+datetime.now(timezone(timedelta(hours=8))).isoformat(timespec='seconds')+'\n网络恢复后可能延迟送达，请以页面最新状态为准。'
         for channel in channels:
             self.db.execute('INSERT OR IGNORE INTO outbox(id,channel,body) VALUES(?,?,?)', (event_id, channel, body))
+        self.db.commit()
+
+    def cancel_legacy_notifications(self):
+        self.db.execute("UPDATE outbox SET cancelled=? WHERE sent IS NULL AND cancelled IS NULL AND (id LIKE 'link-%' OR channel='telegram')",(time.time(),))
         self.db.commit()
 
     def trim(self, now=None, max_bytes=100 * 1024 * 1024):
@@ -113,3 +122,10 @@ class Store:
         self.db.commit()
         self.db.execute('PRAGMA wal_checkpoint(TRUNCATE)')
         self.db.execute('PRAGMA incremental_vacuum(2000)')
+        path = Path(self.db.execute('PRAGMA database_list').fetchone()[2])
+        if path.stat().st_size > max_bytes:
+            self.db.execute('DELETE FROM messages WHERE rowid IN (SELECT rowid FROM messages ORDER BY edited LIMIT (SELECT MAX(0,COUNT(*)-1000) FROM messages))')
+            self.db.execute('DELETE FROM outbox WHERE cancelled IS NOT NULL OR sent IS NOT NULL')
+            self.db.commit()
+            self.db.execute('VACUUM')
+            self.db.execute('PRAGMA wal_checkpoint(TRUNCATE)')
