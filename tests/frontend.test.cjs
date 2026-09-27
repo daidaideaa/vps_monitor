@@ -21,29 +21,30 @@ function page(fetcher) {
 }
 const checked = () => new Date().toISOString();
 const snapshot = () => ({ schema_version: 2, products: [
-  { id: 'rfchost-jp2-co-micro-lite', provider: 'RFCHOST', status: 'unavailable', last_confirmed: 'unavailable', last_checked: checked(), check_interval_seconds: 180, stock: 0 },
+  { id: 'dmit-tyo-pro-tiny', provider: 'DMIT', status: 'unavailable', last_confirmed: 'unavailable', last_checked: checked(), check_interval_seconds: 180, stock: 0 },
   { id: 'vmiss-jp-tky-tri-basic', provider: 'VMISS', status: 'available', last_confirmed: 'available', last_checked: checked(), check_interval_seconds: 180 },
-  { id: 'zgocloud-tokyo-intel-starter', provider: 'ZgoCloud', status: 'unavailable', last_confirmed: 'unavailable', last_checked: checked(), check_interval_seconds: 180, stock: 0 },
+  { id: 'greencloud-tokyo-premium-mini', provider: 'GreenCloud', status: 'unavailable', last_confirmed: 'unavailable', last_checked: checked(), check_interval_seconds: 180, stock: 0 },
+  { id: 'gomami-jpn-pulse-nano', provider: 'GoMami', status: 'unavailable', last_checked: checked(), check_interval_seconds: 180, stock:0 },
   { id: 'vps-tokyo-cloud-essential', provider: 'V.PS', status: 'unavailable', last_confirmed: 'unavailable', last_checked: checked(), check_interval_seconds: 300 },
   { id: 'vps-tokyo-cloud-starter', provider: 'V.PS', status: 'available', last_confirmed: 'available', last_checked: checked(), check_interval_seconds: 300 },
 ] });
 
-test('一次刷新只读 VPS API，三张卡片展示三个独立套餐', async () => {
+test('一次刷新只读 VPS API，四张卡片展示四个独立套餐', async () => {
   const urls = [];
   const p = page(async url => { urls.push(url); return Response.json(snapshot()); });
   await p.run('load()');
-  assert.deepEqual(urls, ['https://jp-vps-status.jp-home-subscription.workers.dev/status.json']);
-  assert.deepEqual(p.states(), ['available','unavailable','unavailable']);
-  assert.equal(p.nodes.cards.children.length, 3);
-  assert.equal(p.run("latest.map(p=>p.provider).join(',')"), 'VMISS,ZgoCloud,RFCHOST');
+  assert.deepEqual(urls, ['https://jp-vps-status.daidaidefish.workers.dev/status.json']);
+  assert.deepEqual(p.states(), ['available','unavailable','unavailable','unavailable']);
+  assert.equal(p.nodes.cards.children.length, 4);
+  assert.equal(p.run("latest.map(p=>p.provider).join(',')"), 'VMISS,GreenCloud,DMIT,GoMami');
 });
 
 test('旧快照中的 V.PS 不再显示或计入统计', async () => {
   const p = page(async () => Response.json(snapshot())); await p.run('load()');
-  assert.equal(p.nodes.cards.children.length, 3);
+  assert.equal(p.nodes.cards.children.length, 4);
   assert.equal(p.text().includes('V.PS'), false);
   const visit = node => [node.textContent, ...node.children.flatMap(visit)];
-  assert.equal(visit(p.nodes.overview).join(''), '1 个套餐有货1 有货 / 2 无货 / 0 待确认');
+  assert.equal(visit(p.nodes.overview).join(''), '1 个套餐有货1 有货 / 3 无货 / 0 待确认');
 });
 
 test('页面同步时间独立于商家实际检查时间，失败不显示同步成功', async () => {
@@ -58,14 +59,14 @@ test('页面同步时间独立于商家实际检查时间，失败不显示同�
   assert.equal(p.nodes.refresh.textContent, '同步失败，稍后重试');
 });
 
-test('VPS 断连保留历史但三个套餐均为 offline，恢复后解除离线', async () => {
+test('VPS 断连保留历史但四个套餐均为 offline，恢复后解除离线', async () => {
   let failed = false;
   const p = page(async () => { if (failed) throw new Error('network'); return Response.json(snapshot()); });
   await p.run('load()'); failed = true; await p.run('load()');
-  assert.deepEqual(p.states(), ['offline','offline','offline']);
+  assert.deepEqual(p.states(), ['offline','offline','offline','offline']);
   assert.equal(p.run('latest[0].last_confirmed'), 'available');
   failed = false; await p.run('load()');
-  assert.deepEqual(p.states(), ['available','unavailable','unavailable']);
+  assert.deepEqual(p.states(), ['available','unavailable','unavailable','unavailable']);
 });
 
 test('单商家 unknown、缺失或过期不污染其它商家的结果', async () => {
@@ -73,24 +74,24 @@ test('单商家 unknown、缺失或过期不污染其它商家的结果', async 
   data.products[0] = {...data.products[0], status:'unknown', last_confirmed:'available', stock:3, unknown_count:1};
   const p = page(async () => Response.json(data));
   await p.run('load()');
-  assert.deepEqual(p.states(), ['available','unavailable','unknown']);
+  assert.deepEqual(p.states(), ['available','unavailable','unknown','unavailable']);
   assert.equal(p.run('latest[2].stock'), null);
   data.products.splice(2,1); await p.run('load()');
-  assert.deepEqual(p.states(), ['available','offline','unknown']);
+  assert.deepEqual(p.states(), ['available','offline','unknown','unavailable']);
   data.products[0].last_checked = '2020-01-01T00:00:00Z'; await p.run('load()');
-  assert.deepEqual(p.states(), ['available','offline','stale']);
+  assert.deepEqual(p.states(), ['available','offline','stale','unavailable']);
 });
 
 test('旧单产品 API 只展示 VMISS，不借用其它来源补造其它结果', async () => {
   const p = page(async () => Response.json({schema_version:1, ...snapshot().products[1]}));
   await p.run('load()');
-  assert.deepEqual(p.states(), ['available','offline','offline']);
+  assert.deepEqual(p.states(), ['available','offline','offline','offline']);
 });
 
 test('重复 id 不会选择任意结果作为当前库存', async () => {
   const data = snapshot(); data.products.push({...data.products[0], status:'available', stock:2});
   const p = page(async () => Response.json(data)); await p.run('load()');
-  assert.deepEqual(p.states(), ['available','unavailable','offline']);
+  assert.deepEqual(p.states(), ['available','unavailable','offline','unavailable']);
 });
 
 test('540 秒边界与不同 interval 的 stale 语义', () => {
@@ -115,9 +116,9 @@ test('首次检查前 unknown，历史显示北京时间，unknown 或过期保�
   assert.equal(p.run("inventoryHistory({}, 'unavailable')[0][1]"), '尚无记录');
 });
 
-test('仅保留三个目标，拒绝退休商家链接，默认十分钟并随机抖动', () => {
+test('仅保留四个目标，拒绝退休商家链接，兼容旧间隔字段', () => {
   const p = page();
-  assert.equal(p.run('latest.length'), 3);
+  assert.equal(p.run('latest.length'), 4);
   assert.equal(p.run('latest.every(item => item.check_interval_seconds === 600)'), true);
   assert.equal(p.run("safeLink('https://vps.hosting/')"), '#');
   assert.equal(p.run("productState({}).interval"), 600);

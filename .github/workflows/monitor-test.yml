@@ -1,36 +1,9 @@
-name: VMISS Monitor Test
-
-on:
-  push:
-    paths:
-      - 'vmiss-stock-monitor/**'
-      - 'server/**'
-      - 'tests/test_*.py'
-      - '.github/workflows/monitor-test.yml'
-  pull_request:
-    paths:
-      - 'vmiss-stock-monitor/**'
-      - 'server/**'
-      - 'tests/test_*.py'
-      - '.github/workflows/monitor-test.yml'
-  workflow_dispatch:
-
+name: Monitor tests
+on: [push, pull_request, workflow_dispatch]
 permissions:
   contents: read
-
-env:
-  PRODUCT_NAME: JP.TKY.TRI.Basic
-  PRODUCT_URL: https://app.vmiss.com/store/jp-tokyo-tri?language=chinese
-  SMTP_HOST: smtp.gmail.com
-  SMTP_PORT: '587'
-  PYTHONUNBUFFERED: '1'
-
-defaults:
-  run:
-    working-directory: vmiss-stock-monitor
-
 jobs:
-  unit-test:
+  test:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -40,49 +13,19 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
-          cache: pip
-          cache-dependency-path: vmiss-stock-monitor/requirements.txt
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-      - name: Install Chromium
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install test dependencies
+        run: pip install -r observatory/requirements.txt -r vmiss-stock-monitor/requirements.txt
+      - name: Parsers, notifications, evidence and legacy compatibility
+        run: python -m unittest discover -s tests -p 'test_*.py'
+      - name: Legacy offline tests
         run: python -m playwright install --with-deps chromium
-      - name: Parser, state and SMTP unit tests (no real email)
+      - name: Legacy offline DOM fixtures
+        working-directory: vmiss-stock-monitor
         run: python -m pytest -q
-      - name: Japan deployment API and state migration tests
-        run: python -m unittest discover -s ../tests -p "test_*.py"
-      - name: Check live VMISS once (no email or state changes)
-        shell: bash
-        run: |
-          result=0
-          python monitor.py --once || result=$?
-          if [ "$result" -eq 2 ]; then
-            echo '::warning::VMISS returned unknown; live inventory access is NOT verified. Check the public evidence above.'
-            echo 'VMISS live check: **unknown**. Offline tests passing does not confirm live page access.' >> "$GITHUB_STEP_SUMMARY"
-          elif [ "$result" -ne 0 ]; then
-            exit "$result"
-          else
-            echo 'VMISS live check: confirmed stock status; see public evidence above.' >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-  integration-email-test:
-    if: github.event_name == 'workflow_dispatch'
-    needs: unit-test
-    environment: vmiss-test
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.11'
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-      - name: Send real SMTP test email
-        env:
-          SMTP_USER: ${{ secrets.SMTP_USER }}
-          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
-          SMTP_FROM: ${{ secrets.SMTP_FROM }}
-          MAIL_TO: ${{ secrets.MAIL_TO }}
-        run: python monitor.py --test-email
+      - name: Access, SQL replay, public schema and pages
+        run: node --experimental-loader ./tests/html-loader.mjs --test tests/link-gateway.test.mjs tests/gateway.test.mjs tests/frontend.test.cjs
+      - name: Build public allowlisted assets
+        run: node scripts/build_public.mjs

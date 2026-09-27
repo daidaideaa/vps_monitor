@@ -1,0 +1,15 @@
+# GitHub Pages publishes only the public inventory UI and its assets.
+# The link page is served by the authenticated Worker.
+exclude:
+  - .github
+  - .local
+  - docs
+  - link-gateway
+  - observatory
+  - scripts
+  - server
+  - status-gateway
+  - tests
+  - vmiss-stock-monitor
+  - README.md
+  - wrangler.jsonc

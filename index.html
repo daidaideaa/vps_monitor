@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="color-scheme" content="light"><meta name="description" content="东京 VPS 库存观察：三家商户、三个套餐，日本家宽 VPS 独立监测。">
+<meta name="color-scheme" content="light"><meta name="description" content="东京 VPS 库存、优惠码与私有链路监控。">
 <title>东京 VPS 库存观察</title>
 <link rel="preload" href="./assets/fonts/openai-regular.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="./assets/fonts/openai-medium.woff2" as="font" type="font/woff2" crossorigin>
@@ -12,25 +12,28 @@
 </head>
 <body><div class="wrap">
 <header class="site-header"><a class="brand" href="./" aria-label="库存监控首页"><span class="brand-icon" aria-hidden="true"><i></i><i></i></span>库存观察 <span class="breadcrumb">东京</span></a><a class="repo-link" href="https://github.com/daidaideaa/vps_monitor" target="_blank" rel="noopener noreferrer">GitHub ↗</a></header>
-<section class="heading"><div><h1>东京 VPS 库存</h1><p class="subtitle">每 8～12 分钟查询商家，确认到货后发送邮件。</p></div><span class="location"><span aria-hidden="true">◎</span> JP-HOME-HY2 · 日本家宽</span></section>
-<div class="toolbar"><div id="overview" class="overview" role="status">正在读取结果…</div><div class="actions"><span id="refresh" class="refresh" title="页面每 30 秒同步服务器已有结果，不触发商家查询。">正在同步…</span><button id="reload" type="button" title="读取服务器已有结果，不触发商家查询"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M13 6a5 5 0 1 0 .1 4M13 2v4H9"/></svg>同步结果</button></div></div>
+<nav class="monitor-info"><a href="./">库存</a> · <a href="https://vps-link-monitor.daidaidefish.workers.dev/network">链路（登录）</a> · <a href="https://vps-link-monitor.daidaidefish.workers.dev/network#incidents">故障记录（登录）</a></nav>
+<section class="heading"><div><h1>东京 VPS 库存</h1><p class="subtitle">跟踪频道补货与优惠码，按消息原始时间展示。</p></div><span class="location"><span aria-hidden="true">◎</span> Telegram 频道观测</span></section>
+<div class="toolbar"><div id="overview" class="overview" role="status">正在读取结果…</div><div class="actions"><span id="refresh" class="refresh" title="页面每 15 秒读取已有的频道观测。">正在同步…</span><button id="reload" type="button" title="读取服务器已有结果，不触发商家查询"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M13 6a5 5 0 1 0 .1 4M13 2v4H9"/></svg>同步结果</button></div></div>
 <main id="cards" class="grid" aria-label="商户库存"><div class="empty">正在读取最近一次检查结果。</div></main>
-<div class="monitor-info"><p>时间均为北京时间。无货时长包含暂时无法确认的时段。</p><details><summary>查询与同步有什么区别？</summary><p>VPS 每轮随机间隔 8～12 分钟访问商家。此页面每 30 秒读取服务器已经保存的结果，“同步结果”也只读取已有结果，不会额外查询商家。每个套餐的“实际检查”才是库存检测时间。全部查询与邮件提醒由日本家宽 VPS 独立完成；验证受阻或记录过期时保留待确认状态。</p></details></div>
-<footer><p>独立监控，库存及购买信息以商家官网为准。</p><p>VMISS · ZgoCloud · RFCHOST</p></footer>
+<div class="monitor-info"><p>时间均为北京时间。页面每 15 秒刷新；频道报告超过 30 分钟显示“当前待确认”。</p><details><summary>库存与优惠码从哪里来？</summary><p>HostMonit、全球 VPS 余量监控、GCPCN 的新消息与编辑是本页的库存来源。频道发现商家变化可能存在延迟。优惠条款不完整时不推算折后价；最终库存、币种、周期及优惠以官网结算为准。历史消息仅用于建立基线，不会重新触发补货通知。</p></details></div>
+<footer><p>独立监控，库存及购买信息以商家官网为准。</p><p>VMISS · GreenCloud · DMIT · GoMami</p></footer>
 </div>
 <script>
-// 三家都由日本家宽 VPS 查询，页面刷新只读取已有结果。
-const VPS_API='https://jp-vps-status.jp-home-subscription.workers.dev/status.json';
+// Public inventory only; no private network endpoints are fetched on this page.
+const VPS_API='https://jp-vps-status.daidaidefish.workers.dev/status.json';
 const cards=document.getElementById('cards'),reload=document.getElementById('reload'),refresh=document.getElementById('refresh');
-const allowedHosts=new Set(['app.vmiss.com','clients.zgovps.com','my.rfchost.com']);
+const allowedHosts=new Set(['app.vmiss.com','greencloudvps.com','www.dmit.io','gomami.io']);
 const words={available:'有货',unavailable:'无货',unknown:'尚未确认'};
 const targets=[
  {id:'vmiss-jp-tky-tri-basic',provider:'VMISS',source:'vps',product_name:'JP.TKY.TRI.Basic',product_url:'https://app.vmiss.com/store/jp-tokyo-tri'},
- {id:'zgocloud-tokyo-intel-starter',provider:'ZgoCloud',source:'vps',product_name:'Tokyo Intel VPS · Starter',product_url:'https://clients.zgovps.com/index.php?/cart/tokyo-intel-vps/'},
- {id:'rfchost-jp2-co-micro-lite',provider:'RFCHOST',source:'vps',product_name:'JP2-CO-Micro-Lite',product_url:'https://my.rfchost.com/index.php?currency=8&rp=/store/jp-2-china-optimization-network-lite'},
+ {id:'greencloud-tokyo-premium-mini',provider:'GreenCloud',source:'vps',product_name:'CN Premium Mini · Tokyo',product_url:'https://greencloudvps.com/billing/store/cn-premium-optimized'},
+ {id:'dmit-tyo-pro-tiny',provider:'DMIT',source:'vps',product_name:'TYO.Pro.TINY',product_url:'https://www.dmit.io/cart.php?a=add&pid=138'},
+ {id:'gomami-jpn-pulse-nano',provider:'GoMami',source:'vps',product_name:'JPN.Pulse.Nano',product_url:'https://gomami.io/cart.php?a=add&pid=13'},
 ];
-let latest=targets.map(target=>({...target,status:'unknown',last_confirmed:'unknown',last_checked:null,stock:null,check_interval_seconds:600,pending:true})),next=30,busy=false;
+let latest=targets.map(target=>({...target,status:'unknown',last_confirmed:'unknown',last_checked:null,stock:null,check_interval_seconds:600,pending:true})),next=15,busy=false;
 function normalize(data,source){
+ if(data?.schema_version===3&&Array.isArray(data.products))return data.products.map(p=>({...p,channel:p.source,last_checked:p.event_at?new Date(p.event_at*1000).toISOString():null,check_interval_seconds:600,unknown_count:0,explanation:data.collector?.state==='awaiting_authorization'?'等待完成 Telegram 独立会话授权':'当前待确认',telegram:true}));
  if(data&&[1,2].includes(data.schema_version)&&Array.isArray(data.products))return data.products;
  if(source==='vps'&&data&&data.schema_version===1&&!data.products&&(!data.provider||data.provider==='VMISS'))return [{...data,id:'vmiss-jp-tky-tri-basic',provider:'VMISS'}];
  throw new Error('Data');
@@ -73,7 +76,7 @@ function stockLabel(item,state){return ['available','unavailable'].includes(stat
 function checkedTime(meta){return Number.isFinite(meta.checked)?new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(meta.checked):'等待首次检查';}
 function explanationFor(item,state){return state==='offline'?'暂时无法读取服务器状态，页面将自动重试。':state==='stale'?'最近记录已过期，等待下一次可靠检查。':state==='available'?'已检测到库存，请前往官网确认并下单。':state==='unavailable'?'最近一次可靠检查未发现库存。':(item.explanation||'本轮无法可靠确认库存，等待复查。');}
 function fact(label,value){const node=el('div','fact');node.append(el('div','label',label),el('div','value',value));return node;}
-function actionFor(item){const action=el('div','card-action'),source=el('span','source',({'japan-home-vps':'日本家宽直查','japan-vps-egress':'原日本备用记录','hong-kong-vps':'原香港记录'}[item.query_location]||'等待日本检查'));const link=el('a','buy-link','前往官网');link.href=safeLink(item.product_url);link.target='_blank';link.rel='noopener noreferrer';link.append(el('span','','↗'));action.append(source,link);return action;}
+function actionFor(item){const action=el('div','card-action'),source=el('span','source',({'japan-home-vps':'日本家宽直查','japan-vps-egress':'原日本备用记录','hong-kong-vps':'原香港记录'}[item.query_location]||(item.telegram?'来源：'+(item.channel||'等待授权'):'等待日本检查')));const link=el('a','buy-link','前往官网');link.href=safeLink(item.product_url);link.target='_blank';link.rel='noopener noreferrer';link.append(el('span','','↗'));action.append(source,link);return action;}
 function panelHead(provider,subtitle){const head=el('div','panel-head');head.append(el('h2','provider',provider),el('span','provider-host',subtitle));return head;}
 function planFor(item){
  const meta=productState(item),state=meta.state,plan=el('section','plan');plan.dataset.state=state;plan.dataset.productId=item.id;
@@ -84,6 +87,17 @@ function planFor(item){
  const history=inventoryHistory(item,state),facts=el('div','facts');
  facts.append(fact('实际检查',checkedTime(meta)),fact('本轮无货',history[0][1]));
  plan.append(facts);
+ if(item.telegram){
+   facts.replaceChildren(fact('频道报告',checkedTime(meta)),fact('当前状态',state==='available'?'频道报告有货':state==='unavailable'?'频道报告无货':'当前待确认'));
+   const extra=el('div','history-facts');
+   for(const p of item.prices||[])extra.append(fact('来源标价',p.amount+' '+p.currency+'/'+p.cycle));
+   const c=item.coupon,valid=c&&c.validity!=='expired'&&(!c.expires_at||c.expires_at>Date.now()/1000);
+   extra.append(fact('优惠码',valid?c.code:'未找到适用且未过期的优惠码'));
+   if(valid){extra.append(fact('周期与续费',(c.cycle||'周期未明确')+' · '+(c.recurring?'来源报告循环优惠':'续费优惠未确认')));if(c.discounted)extra.append(fact('规则计算价 · 结算待验证',c.discounted.amount+' '+c.discounted.currency+'/'+c.discounted.cycle));extra.append(fact('有效期',c.expires_at?new Date(c.expires_at*1000).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'}):'来源未披露'));extra.append(el('p','plan-note',c.terms));}
+   if(/^https:\/\/t\.me\/(hostmonit|vps_spiders|gcpcn)\/\d+$/.test(item.source_url||'')){const link=el('a','buy-link','查看来源消息 ↗');link.href=item.source_url;link.target='_blank';link.rel='noopener noreferrer';extra.append(link);}
+   if(valid&&c.source_url!==item.source_url&&/^https:\/\/t\.me\/(hostmonit|vps_spiders|gcpcn)\/\d+$/.test(c.source_url||'')){const link=el('a','buy-link','查看优惠来源 ↗');link.href=c.source_url;link.target='_blank';link.rel='noopener noreferrer';extra.append(link);}
+   plan.append(extra,actionFor(item));return plan;
+ }
  const details=el('details','plan-details'),summary=el('summary','','检查详情'),detailFacts=el('div','history-facts');
  detailFacts.append(fact('最近确认状态',words[item.last_confirmed]||'尚未确认'),fact('商家查询间隔',meta.interval===600?'随机 8～12 分钟':meta.interval+' 秒'));
  detailFacts.append(fact('上次有货',history[1][1]));if(stockLabel(item,state))detailFacts.append(fact('确认库存',String(item.stock)));
@@ -112,7 +126,7 @@ async function loadSource(source,url){
 async function load(){
  if(busy)return;busy=true;reload.disabled=true;refresh.textContent='正在同步…';
  try{const ok=await loadSource('vps',VPS_API);refresh.textContent=ok?'页面同步于 '+new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(Date.now()):'同步失败，稍后重试';}
- finally{busy=false;reload.disabled=false;next=30;}
+ finally{busy=false;reload.disabled=false;next=15;}
 }
 draw();
 reload.addEventListener('click',load);load();setInterval(()=>{if(!busy&&--next<=0)load();},1000);
