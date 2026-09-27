@@ -170,7 +170,18 @@ def log_events(config, since=600, window=None):
         if not files:return []
         with files[0].open('rb') as f:
             f.seek(max(0,files[0].stat().st_size-180000));text=f.read().decode('utf-8','replace')
-        return [safe_text(line)[:400] for line in text.splitlines() if re.search(r'JP-Home|VMISS|HY2|TUN|tun.*fail|network.*chang|no recent network|stateless reset',line,re.I)][-30:]
+        from datetime import datetime
+        start=window['started_at']-600 if window else time.time()-since
+        end=min(time.time(),window['end_at']) if window else time.time()
+        relevant=[]
+        for line in text.splitlines():
+            if not re.search(r'JP-Home|VMISS|HY2|TUN|tun.*fail|network.*chang|no recent network|stateless reset',line,re.I):continue
+            stamp=re.search(r'\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:\d{2})?',line)
+            if not stamp:continue
+            try:at=datetime.fromisoformat(stamp[0].replace('Z','+00:00').replace(',','.')).timestamp()
+            except ValueError:continue
+            if start<=at<=end:relevant.append(safe_text(line)[:400])
+        return relevant[-30:]
     args=['journalctl','--since','@'+str(int(window['started_at']-600)) if window else f'{since} seconds ago','--no-pager','-o','json','-n','150']
     if window:args+=['--until','@'+str(int(min(time.time(),window['end_at'])))]
     for service in config.get('services',[]):args+=['-u',service]
