@@ -131,7 +131,7 @@ class Hub:
             if old and (old[1] or now<i['end_at']):continue
             try:
                 logs=reader(i)[-10:]
-                value={'state':'complete' if now>=i['end_at'] else 'initial','source':'vmiss-hy2.service journal',
+                value={'state':'complete' if now>=i['end_at'] else 'initial','source':('vmiss-vless.service' if i['target']=='vmiss.vless' else 'vmiss-hy2.service')+' journal',
                        'window_start':i['started_at']-600,'window_end':i['end_at'],
                        'excerpt':[str(line)[:400] for line in logs]}
             except Exception as exc:value={'state':'unavailable','reason':type(exc).__name__}
@@ -153,7 +153,7 @@ class Hub:
     def daily(self, day):
         start=datetime.fromisoformat(day).replace(tzinfo=CST).timestamp(); end=start+86400
         stats=self.statistics(start,end)
-        lines=[f'[链路日报] {day}（北京时间）','常规采样 120 秒；故障复核另计，缺测不计丢包。']
+        lines=[f'[链路日报] {day}（北京时间）','常规采样间隔按样本记录；故障复核另计，缺测不计丢包。HY2 与 VLESS 分项统计。']
         for source in ('windows','vmiss'):
             count=self.db.execute('SELECT COUNT(*) FROM samples WHERE source=? AND captured>=? AND captured<? AND json_extract(body,\'$.kind\')=\'regular\'',(source,start,end)).fetchone()[0]
             # Sum expected coverage per actual schedule; unknown time remains uncovered.
@@ -166,9 +166,10 @@ class Hub:
                 s=json.loads(row[0]);lines.append('资源/监控预算/上传：'+json.dumps({k:s.get(k) for k in ('host','budget','upload')},ensure_ascii=False)[:2000])
         for i in self.incidents(start-30*86400):
             if i.get('target','').startswith('home.'):continue
-            if i.get('confirmed_at') and i['started_at']<end and (i.get('recovered_at') or end)>start:
-                duration=max(0,min(end,i.get('recovered_at') or end)-max(start,i['started_at']))
-                lines.append(f"异常 {i['source']}/{i['target']}: 本日估计 {duration:.0f} 秒；"+('已恢复' if i.get('recovered_at') else '未确认恢复'))
+            until=i.get('recovered_at') or i.get('monitoring_ended_at') or end
+            if i.get('confirmed_at') and i['started_at']<end and until>start:
+                duration=max(0,min(end,until)-max(start,i['started_at']))
+                lines.append(f"异常 {i['source']}/{i['target']}: 本日观测区间估计 {duration:.0f} 秒；"+('已恢复' if i.get('recovered_at') else '已停止此项探测，未确认恢复' if i.get('monitoring_ended_at') else '未确认恢复'))
         lines += ['\n已确认事实：以上统计来自实际样本及日志。','推断：失败所属层面见故障记录，不能单凭超时判断运营商故障。',
                   '缺失证据：无第二台独立外部观测；电脑休眠/离线期间未知；未进行持续抓包。']
         return '\n'.join(lines)

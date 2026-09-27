@@ -18,14 +18,16 @@ def classify(samples):
     facts += ['时间窗内曾成功：'+', '.join(good)] if good else []
     if any(k in failed for k in ('gateway.icmp', 'china.icmp')):
         inference.append('本机或本地接入优先排查；须结合远端观测确认。')
-    if 'client.http' in failed and any(k.endswith('.hy2') for k in good):
+    if 'client.http' in failed and any(k.endswith(('.hy2','.vless')) for k in good):
         inference.append('当前客户端与独立探针结果不同，优先检查客户端配置、TUN、路由或会话。')
     for k in failed:
         if k.endswith('.hy2') and k.removesuffix('.hy2')+'.tcp' in good:
             inference.append(k+': TCP 可达，HY2 请求失败；可能涉及 UDP、认证、远端出口或主机网络栈，待定位。')
+        if k.endswith('.vless') and k.removesuffix('.vless')+'.tcp' in good:
+            inference.append(k+': 管理端口 TCP 可达，VLESS 请求失败；需检查代理端口、TLS、认证与远端出口，不能据此归因 UDP。')
         if k.endswith('.dns') or k.endswith('.https'):
-            inference.append('存在 DNS/HTTPS 出口检查失败；结合 HY2 握手与服务日志判断。')
-    if failed and all(k.endswith('.icmp') for k in failed) and any(k.endswith(('.tcp','.hy2')) for k in good):
+            inference.append('存在 DNS/HTTPS 出口检查失败；结合代理连接与服务日志判断。')
+    if failed and all(k.endswith('.icmp') for k in failed) and any(k.endswith(('.tcp','.hy2','.vless')) for k in good):
         inference.append('仅 ICMP 异常，现有证据不支持判定代理断线。')
     for sample in samples:
         for service, state in sample.get('host',{}).get('services',{}).items():
@@ -34,10 +36,10 @@ def classify(samples):
                 inference.append('存在 VPS 服务侧异常证据。')
         if sample.get('gap'):
             facts.append('采集出现间隔：'+str(sample['gap']))
-    missing += ['单点观测不能确认运营商故障；需关联其他探针和两端 UDP 元数据。']
+    missing += ['单点观测不能确认运营商故障；需关联客户端与服务器同窗日志。']
     if not inference: inference.append('待定位：现有证据不足以确定故障层。')
     # A compact timeline supports correlation without downloading every raw sample.
-    relevant=[e for e in events if e['metric'].endswith(('.hy2','.tcp')) or e['metric'] in ('gateway.icmp','china.icmp','client.http')]
+    relevant=[e for e in events if e['metric'].endswith(('.hy2','.vless','.tcp')) or e['metric'] in ('gateway.icmp','china.icmp','client.http')]
     # Keep state transitions (including a brief failure) before periodic observations.
     transitions=[]; previous={}
     for event in relevant:
