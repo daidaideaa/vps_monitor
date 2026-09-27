@@ -21,6 +21,8 @@ jobs:
       - name: Parsers, notifications, evidence and legacy compatibility
         run: python -m unittest discover -s tests -p 'test_*.py'
       - name: Legacy offline tests
+        run: python -m playwright install --with-deps chromium
+      - name: Legacy offline DOM fixtures
         working-directory: vmiss-stock-monitor
         run: python -m pytest -q
       - name: Access, SQL replay, public schema and pages
