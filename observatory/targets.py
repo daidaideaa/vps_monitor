@@ -1,7 +1,7 @@
 """Exact products and permitted Telegram sources; never execute message content."""
 TARGETS = (
     dict(id='vmiss-jp-tky-tri-basic', provider='VMISS', product_name='JP.TKY.TRI.Basic',
-         host='app.vmiss.com', pid='101', channels=['hostmonit','vmiss_com','vmisscom'],
+         host='app.vmiss.com', pid='101', channels=['hostmonit','vmisstz','vmiss_com','vmisscom'],
          aliases=['jp.tky.tri.basic'], product_url='https://app.vmiss.com/store/jp-tokyo-tri'),
     dict(id='greencloud-tokyo-premium-mini', provider='GreenCloud',
          product_name='CN Premium Mini (Tokyo)', host='greencloudvps.com', pid='2213',
