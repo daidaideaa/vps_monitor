@@ -10,6 +10,20 @@ from observatory.stock import parse_message, accept, snapshot, parse_coupon
 from observatory.store import Store
 from observatory.incidents import Incidents, classify
 from observatory.notify import drain
+from observatory.vmiss_reservation import (Merchant, Page, Reservation, ReservationError,
+    checkout_payload, coupon_candidates, order_signal, safe_url)
+
+
+def reservation_checkout(product='JP.TKY.TRI.Basic', cycle='/yr', quantity='1', amount='120.00', credit=True):
+    return Page(200, 'https://app.vmiss.com/cart.php?a=checkout', f'''
+    <table><tr><td>{product}<span class="cart-item-price">$120.00 CAD{cycle}</span>
+    <div hidden>$120.00 CAD/yr</div></td><td><input name="qty[0]" value="{quantity}"></td></tr></table>
+    <div id="totalDueToday">${amount} CAD</div><form id="frmCheckout">
+    <input name="token" value="csrf"><input name="account_id" type="radio" value="123" checked>
+    <input name="paymentmethod" type="radio" value="stripe" checked>
+    <input name="paymentmethod" type="radio" value="motionpayalipay">
+    {'<input name="applycredit" type="radio" value="1">' if credit else ''}
+    <input name="ccnumber" value="never-submit"><input name="accepttos" type="checkbox"></form>''')
 
 class ObservatoryTest(unittest.TestCase):
     def setUp(self):
@@ -124,5 +138,135 @@ class ObservatoryTest(unittest.TestCase):
         self.store.acknowledge([pending[0][0]])
         self.assertEqual(self.store.pending(),[])
         self.assertEqual(len(self.store.window(self.now,self.now+10)),1)
+
+    def test_reservation_checkout_policy(self):
+        data, amount = checkout_payload(reservation_checkout())
+        self.assertEqual((data['applycredit'], data['paymentmethod'], str(amount)), ('1', 'motionpayalipay', '120.00'))
+        self.assertNotIn('ccnumber', data)
+        for change in [dict(product='JP.TKY.TRI.Pro'), dict(cycle='/mo'), dict(quantity='2'), dict(amount='200.00'), dict(credit=False)]:
+            with self.subTest(change=change), self.assertRaises(ReservationError):
+                checkout_payload(reservation_checkout(**change))
+        for url in ['https://evil.example/checkout', 'http://app.vmiss.com/', 'https://app.vmiss.com@evil.example/']:
+            with self.subTest(url=url), self.assertRaises(ReservationError):
+                safe_url(url)
+
+    def test_reservation_lifecycle(self):
+        from unittest.mock import Mock
+        invoice = {'status': 'held', 'invoice_id': '456', 'invoice_url': 'https://app.vmiss.com/viewinvoice.php?id=456'}
+        for scenario in ('success', 'timeout', 'crash', 'restock'):
+            with self.subTest(scenario=scenario):
+                root = Path(self.tmp.name) / scenario
+                merchant = Mock()
+                merchant.prepare.return_value = ({'status': 'prepared', 'total': '120.00'}, {})
+                merchant.inspect_invoice.return_value = None
+                merchant.invoice.return_value = invoice
+
+                def submit(_):
+                    self.assertEqual(json.loads((root/'state.json').read_text())['status'], 'submitting')
+                    if scenario == 'timeout':
+                        raise ReservationError('network_failure')
+                    return Page(302, 'https://app.vmiss.com/cart.php?a=checkout', '')
+
+                merchant.submit.side_effect = submit
+                worker = Reservation(root, self.store, merchant)
+                if scenario == 'crash':
+                    worker.save(status='submitting')
+                elif scenario == 'restock':
+                    merchant.prepare.return_value = ({'status': 'unavailable'}, None)
+                    self.assertEqual(worker.attempt(signal='first'), 'unavailable')
+                    merchant.prepare.return_value = ({'status': 'prepared', 'total': '120.00'}, {})
+                self.assertEqual(worker.attempt(signal='next'), 'manual_required' if scenario == 'timeout' else 'held')
+                queued = self.store.db.execute('SELECT COUNT(*) FROM outbox').fetchone()[0]
+                Reservation(root, self.store, merchant).attempt(signal='duplicate')
+                self.assertEqual(merchant.submit.call_count, 0 if scenario == 'crash' else 1)
+                self.assertEqual(self.store.db.execute('SELECT COUNT(*) FROM outbox').fetchone()[0], queued)
+
+    def test_reservation_coupon_fallback(self):
+        self.assertEqual(coupon_candidates({'coupon': {'code': '10%OFF', 'cycle': '年'}}, self.now), ['10%OFF'])
+        for coupon in [dict(code='OLD', expires_at=self.now-1), dict(code='MONTH', cycle='月'), dict(code='x&submit=true')]:
+            with self.subTest(coupon=coupon):
+                self.assertEqual(coupon_candidates({'coupon': coupon}, self.now), [])
+        merchant = object.__new__(Merchant)
+        merchant.credentials = {'fallback_coupons': ['10%OFF']}
+        merchant.login = lambda: None
+        merchant.invoice = lambda: None
+        merchant.invoice_links = lambda: []
+        merchant.existing_service = lambda: False
+        merchant.configure = lambda page: {}
+        tried = []
+
+        def request(path, data=None):
+            if data and 'promocode' in data:
+                tried.append(data['promocode'])
+                if data['promocode'] == '10%OFF':
+                    page = reservation_checkout(amount='108.00')
+                    return Page(page.status, page.url, page.html + '<p>10%OFF</p>')
+            return reservation_checkout()
+
+        merchant.request = request
+        prepared, data = merchant.prepare({'coupon': {'code': 'EXPIRED_AT_VENDOR'}})
+        self.assertEqual(tried, ['EXPIRED_AT_VENDOR', '10%OFF'])
+        self.assertEqual((prepared['coupon'], prepared['total'], data['applycredit']), ('10%OFF', '108.00', '1'))
+
+    def test_reservation_signals(self):
+        p = self.message()
+        order_signal(self.store, p, baseline=True, now=self.now)
+        for change in [dict(event_at=self.now-1801), dict(event_at=self.now+1), dict(id='other')]:
+            order_signal(self.store, {**p, **change}, now=self.now)
+        self.assertIsNone(self.store.get('vmiss_order_signal'))
+        accept(self.store, p, baseline=True, now=self.now)
+        coupon = self.message('JP.TKY.TRI.Basic\n优惠码 NEW 年付 8折\nhttps://app.vmiss.com/?pid=101', 2, self.now+1)
+        accept(self.store, coupon, now=self.now+1)
+        self.assertIsNone(self.store.get('vmiss_order_signal'))
+        fresh = self.message(id=3, at=self.now+2)
+        accept(self.store, fresh, now=self.now+2)
+        signal = self.store.get('vmiss_order_signal')
+        self.assertIsNotNone(signal)
+        accept(self.store, fresh, now=self.now+2)
+        self.assertEqual(self.store.get('vmiss_order_signal'), signal)
+
+    def test_reservation_invoice_reconciliation(self):
+        merchant = object.__new__(Merchant)
+        listing = Page(200, 'https://app.vmiss.com/clientarea.php?action=invoices', '''
+        <a href="logout.php">Logout</a><table><tbody>
+        <tr data-url="viewinvoice.php?id=2"><td>未付款</td></tr>
+        <tr data-url="viewinvoice.php?id=3"><td>未付款</td></tr></tbody></table>''')
+        topup = Page(200, 'https://app.vmiss.com/viewinvoice.php?id=2', '<table><tr><td>账户充值</td></tr></table>')
+        target = Page(200, 'https://app.vmiss.com/viewinvoice.php?id=3', '''
+        <span class="invoice-status">未付款</span><table><tr><td>JP.TKY.TRI.Basic</td></tr>
+        <tr><td>余额</td><td>$15.00 CAD</td></tr><tr><td>结余</td><td>$93.00 CAD</td></tr></table>''')
+        merchant.request = lambda path: listing if 'invoices' in path else topup if 'id=2' in path else target
+        result = merchant.invoice()
+        self.assertEqual((result['invoice_id'], result['credit_applied'], result['balance_due']), ('3', '15.00', '93.00'))
+        self.assertIsNone(merchant.invoice(exclude_ids=['3']))
+        self.assertEqual(Merchant.inspect_invoice(Page(200, target.url, target.html.replace('未付款', '已付款')))['status'], 'paid_with_credit')
+
+    def channel_message(self, source='vmisstz', ident=1, state='✅ 补货', code='10%OFF', offset=0, plan='JP.TKY.TRI.Basic'):
+        return parse_message(source, ident, f'VMISS - {plan}\n价格：$5.00 CAD 每月\n优惠码：{code}\n{state}',
+            self.now+offset, ['https://app.vmiss.com/cart.php?a=add&pid=101'])
+
+    def test_vmisstz_exact_plan_and_vendor_link(self):
+        from observatory.targets import CHANNELS, VENDOR_SOURCES
+        self.assertIn('vmisstz', CHANNELS)
+        self.assertNotIn('vmisstz', VENDOR_SOURCES)
+        p = self.channel_message()
+        self.assertEqual((p['status'], p['coupon']['code'], p['prices'][0]['currency'], p['prices'][0]['cycle']), ('available', '10%OFF', 'CAD', '月'))
+        for plan in ('JP.TKY.IIJ.Basic', 'JP.TKY.BGP.Core', 'JP.OSA.IIJ.Basic', 'US.LA.TRI.Basic'):
+            self.assertIsNone(self.channel_message(plan=plan))
+        self.assertIsNone(parse_message('vmisstz', 3, 'JP.TKY.TRI.Basic\n✅ 补货', self.now))
+
+    def test_vmisstz_edits_and_cross_source_dedup(self):
+        accept(self.store, self.channel_message(), baseline=True, now=self.now, channels=('email',))
+        accept(self.store, self.channel_message('hostmonit', 2, offset=1), now=self.now+1, channels=('email',))
+        self.assertEqual(self.store.db.execute('SELECT COUNT(*) FROM outbox').fetchone()[0], 0)
+        sold = self.channel_message(state='❌ 售罄', offset=2)
+        accept(self.store, sold, now=self.now+2, channels=('email',))
+        self.assertEqual(self.store.get('stock:'+sold['id'])['status'], 'unavailable')
+        for p in [self.channel_message(ident=3, offset=3), self.channel_message(ident=3, offset=3),
+                  self.channel_message('hostmonit', 4, offset=4), self.channel_message(ident=5, code='SAVE20', offset=5),
+                  self.channel_message(ident=5, code='SAVE20', offset=5)]:
+            accept(self.store, p, now=self.now+6, channels=('email',))
+        self.assertEqual(self.store.db.execute('SELECT COUNT(*) FROM outbox').fetchone()[0], 2)
+
 
 if __name__=='__main__':unittest.main()
