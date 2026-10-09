@@ -57,4 +57,6 @@ VMISS 代码 /opt/vps-observatory-low，配置 /etc/vps-observatory-low（私有
 
 除 HostMonit、vps_spiders、GCPCN，现接入账号已有的 vmiss_com、dmitnews，以及 vmisscom 和 GoMamiNetworks。客户群仅接受管理员或群自身发布的原始消息，排除转发和普通聊天；管理员名单每小时刷新，获取失败时停止采信该群。精确套餐和地区匹配继续生效，系列优惠不能代表 Basic 等具体规格有货。
 
+2026-09-29 新增用户指定的 `vmisstz`（VMISS 补货通知频道）。只匹配 JP.TKY.TRI.Basic，并要求 VMISS 商品链接；不因频道名称将其当作已验证的官方公告来源。首次历史静默建基线，新消息与售罄编辑沿用原监听及跨来源状态去重，不增加周期网页抓取。
+
 GreenCloud 基线改按商品编号 2213 搜索，避免被 Singapore Mini 挤占。库存页区分“上次报告结论”和“当前待确认”，不把读取旧消息改成当前证据。历史优惠码显示适用周期、续费、有效期和来源条款，超过 30 天的未注明过期优惠提示当前有效性待确认。

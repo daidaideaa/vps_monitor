@@ -128,6 +128,7 @@ def accept(store, product, baseline=False, now=None, channels=('telegram','email
     if product is None:
         return False
     now = now or time.time()
+    order_observation = dict(product)
     if product['event_at'] > now+120:
         return False
     previous = store.get('stock:'+product['id'])
@@ -159,6 +160,8 @@ def accept(store, product, baseline=False, now=None, channels=('telegram','email
     if not baseline and kind and product['status'] == 'available' and now-product['event_at'] <= 1800:
         store.enqueue(f"stock:{product['id']}:{product['source']}:{product['message_id']}:{product['content_hash']}", notification(product, kind),channels=channels)
     store.set('stock:'+product['id'], product)
+    from .vmiss_reservation import order_signal
+    order_signal(store, order_observation, baseline, now)
     return True
 
 
