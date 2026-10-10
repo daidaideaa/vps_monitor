@@ -1,6 +1,6 @@
 # 历史部署文档（已停用）
 
-ZgoCloud / RFCHOST 调度已停用，以下内容仅供查阅旧历史和回滚。不要作为当前安装入口。
+ZgoCloud / RFCHOST 调度以及旧 JP-Home 浏览器采集、上传服务均已停用，以下完整正文是历史快照，不得用其中“现在”“当前”等字样描述 2026-10-10 的部署。**不要执行本页安装和启动命令**；当前方案见 [README](../README.md)、[现行部署](observability.md)，VMISS 为 Telegram + 300 秒低频监控（主协议 VLESS）及独立年付锁单服务。
 
 # 东京 VPS 库存观察
 

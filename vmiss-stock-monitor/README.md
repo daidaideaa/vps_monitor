@@ -1,4 +1,6 @@
-# VMISS VPS 库存监控
+# VMISS VPS 库存监控（历史独立 Playwright 方案）
+
+> **已退出当前生产链路，仅保留历史安装步骤、离线回归和兼容测试。** 截至 2026-10-10，现行方案已迁至 VMISS 上的 Telegram 独立会话 + 低消耗采集 + SQLite / 邮件；不再按下文每 60 秒启动 Chromium。请改看 [仓库主页](../README.md)、[当前部署](../docs/observability.md) 与 [VMISS 单次年付订单](../docs/vmiss-reservation.md)。**不要在现有 VMISS 上执行本页的 `systemctl enable --now vmiss-stock-monitor` 或恢复旧调度**，以免重新引入双份库存、重复邮件和内存负载。下述参数和命令仅适用于独立历史环境。
 
 Python + Playwright Headless Chromium，默认每 60 秒检查 `JP.TKY.TRI.Basic`，有货时通过 SMTP 提醒。仅使用 JSON 保存状态，无数据库、Docker、Web UI 或自动购买。
 
