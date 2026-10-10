@@ -4,7 +4,7 @@ ZgoCloud / RFCHOST 调度以及旧 JP-Home 浏览器采集、上传服务均已�
 
 # 东京 VPS 库存观察
 
-独立的 Python VMISS 邮件监控见 [vmiss-stock-monitor/](vmiss-stock-monitor/README.md)，支持 Debian 12、systemd 和 GitHub 手动 SMTP 测试。日本端调度现在直接复用本仓库这一版本，不再依赖 vps_build 中的旧接口。
+独立的 Python VMISS 邮件监控见 [vmiss-stock-monitor/](../vmiss-stock-monitor/README.md)，支持 Debian 12、systemd 和 GitHub 手动 SMTP 测试。日本端调度现在直接复用本仓库这一版本，不再依赖 vps_build 中的旧接口。
 
 [库存页面](https://daidaideaa.github.io/vps_monitor/)由 **JP-HOME-HY2（日本家宽 VPS）**独立检查三家商户的三个套餐并发送邮件。Windows 无需常开，运行链路不再依赖香港 VPS。
 
