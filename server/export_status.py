@@ -115,7 +115,7 @@ def snapshot(state, interval=INTERVAL, previous=None):
                  'query_location': os.environ.get('QUERY_LOCATION', 'japan-home-vps')}
     target = state.get('target') or {}
     merged = dict(state)
-    merged['product_name'] = target.get('product_name', 'JP.TKY.TRI.Basic')
+    merged['product_name'] = target.get('product_name', 'JP.TKY.STD.Basic')
     merged['product_url'] = target.get('product_url', '')
     merged['status'] = 'unknown' if int(state.get('unknown_count', 0) or 0) else state.get('last_confirmed', 'unknown')
     public = _public_product(merged, 'VMISS', 'vmiss-jp-tky-tri-basic', interval)

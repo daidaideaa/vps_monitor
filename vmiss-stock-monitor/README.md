@@ -2,7 +2,7 @@
 
 > **已退出当前生产链路，仅保留历史安装步骤、离线回归和兼容测试。** 截至 2026-10-10，现行方案已迁至 VMISS 上的 Telegram 独立会话 + 低消耗采集 + SQLite / 邮件；不再按下文每 60 秒启动 Chromium。请改看 [仓库主页](../README.md)、[当前部署](../docs/observability.md) 与 [VMISS 单次年付订单](../docs/vmiss-reservation.md)。**不要在现有 VMISS 上执行本页的 `systemctl enable --now vmiss-stock-monitor` 或恢复旧调度**，以免重新引入双份库存、重复邮件和内存负载。下述参数和命令仅适用于独立历史环境。
 
-Python + Playwright Headless Chromium，默认每 60 秒检查 `JP.TKY.TRI.Basic`，有货时通过 SMTP 提醒。仅使用 JSON 保存状态，无数据库、Docker、Web UI 或自动购买。
+Python + Playwright Headless Chromium，默认每 60 秒检查 `JP.TKY.STD.Basic`，有货时通过 SMTP 提醒。仅使用 JSON 保存状态，无数据库、Docker、Web UI 或自动购买。
 
 本目录是**独立部署服务**，GitHub workflow 位于仓库根目录 `.github/workflows/monitor-test.yml`。现有 `server/run_japan_cycle.py` 使用另一版 VMISS 接口，本项目不是它的直接替换件。已有日本端多商户监控的机器，不要覆盖其 `/opt/vmiss-stock-monitor` 或同时启动两套 VMISS 邮件监控。下面命令适用于全新安装；迁移已有服务须单独安排接口、状态迁移和停用旧调度。
 
@@ -11,8 +11,8 @@ Python + Playwright Headless Chromium，默认每 60 秒检查 `JP.TKY.TRI.Basic
 复制 `.env.example` 为 `.env`，配置程序从项目所在目录读取；系统环境变量优先。`.env` 的值不做 `${...}` 展开。真实凭据只在 VPS 的私密 `.env` 或 GitHub Environment Secrets 中填写，不放进源码、聊天、日志或 Git。
 
 ```dotenv
-PRODUCT_NAME=JP.TKY.TRI.Basic
-PRODUCT_URL=https://app.vmiss.com/store/jp-tokyo-tri?language=chinese
+PRODUCT_NAME=JP.TKY.STD.Basic
+PRODUCT_URL=https://app.vmiss.com/store/jp-tokyo-std?language=chinese
 
 CHECK_INTERVAL_SECONDS=60
 PAGE_TIMEOUT_MS=30000

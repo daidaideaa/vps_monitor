@@ -72,17 +72,19 @@ async def run(config, login=False):
         for message in sorted(history, key=lambda m: (m.edit_date or m.date, m.id)):
             process(message, baseline=baseline)
         store.set('source_initialized:'+name,True)
-    if not store.get('targeted_baseline_v2'):
+    if not store.get('targeted_baseline_v3'):
         # Busy channels can bury an exact plan beyond 300 posts. Bounded searches run once,
         # silently, rather than repeatedly rereading an entire channel or refreshing stock age.
-        searches={'hostmonit':['JP.TKY.TRI.Basic','2213'],
+        searches={'hostmonit':['JP.TKY.STD.Basic','2213'],
+                  'vmisstz':['JP.TKY.STD.Basic'], 'vmiss_com':['JP.TKY.STD.Basic'],
+                  'vmisscom':['JP.TKY.STD.Basic'],
                   'vps_spiders':['TYO.Pro.TINY'],'gcpcn':['JPN.Pulse.Nano']}
         for peer in entities:
             for query in searches.get(peers[peer.id],[]):
                 history=await retry_flood(lambda:client.get_messages(peer,limit=15,search=query))
                 for message in sorted(history,key=lambda m:(m.edit_date or m.date,m.id)):
                     process(message,baseline=True)
-        store.set('targeted_baseline_v2',True)
+        store.set('targeted_baseline_v3',True)
     store.set('initialized', True)
     await retry_flood(client.catch_up)
     last_health = 0

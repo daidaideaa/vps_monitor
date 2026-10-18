@@ -13,7 +13,7 @@ from playwright.sync_api import sync_playwright
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import monitor as m
 
-PRODUCT = "JP.TKY.TRI.Basic"
+PRODUCT = "JP.TKY.STD.Basic"
 
 
 def card(text="0 Available", name=PRODUCT, button=""):
@@ -36,7 +36,7 @@ def page(browser):
     page = browser.new_page()
     # 截断一切外网：只有测试 HTML，测试中出现任意请求均在此本地响应。
     page.route("**/*", lambda route: route.fulfill(body="<html></html>", content_type="text/html"))
-    page.goto("https://app.vmiss.com/store/jp-tokyo-tri")
+    page.goto("https://app.vmiss.com/store/jp-tokyo-std")
     yield page
     page.close()
 
@@ -46,8 +46,8 @@ def page(browser):
     (card("3 Available"), "available"),
     (card("Out of Stock"), "unavailable"),
     (card("", button=ORDER), "available"),
-    (card("", name="JP.TKY.TRI.Pro", button=ORDER), "unknown"),
-    (card("0 Available") + card("", "JP.TKY.TRI.Pro", ORDER), "unavailable"),
+    (card("", name="JP.TKY.STD.Pro", button=ORDER), "unknown"),
+    (card("0 Available") + card("", "JP.TKY.STD.Pro", ORDER), "unavailable"),
     ('<title>Just a moment...</title>' + card("3 Available"), "unknown"),
     ('<p>Cloudflare</p>' + card("3 Available"), "unknown"),
     ('<form id="challenge-form">verify</form>' + card("3 Available"), "unknown"),
@@ -74,8 +74,8 @@ def page(browser):
     (card("", name=PRODUCT + "Plus", button=ORDER), "unknown"),
     (f'<h3>{PRODUCT}</h3><div>3 Available</div>', "unknown"),
     (f'<div id="products"><h3>{PRODUCT}</h3><div class="product"><h3>Pro</h3>{ORDER}</div></div>', "unknown"),
-    (f'<div id="products"><h3>{PRODUCT}</h3><div>JP.TKY.TRI.Pro 3 Available</div></div>', "unknown"),
-    (card("") + card("5 Available", "JP.TKY.TRI.Pro", ORDER), "unknown"),
+    (f'<div id="products"><h3>{PRODUCT}</h3><div>JP.TKY.STD.Pro 3 Available</div></div>', "unknown"),
+    (card("") + card("5 Available", "JP.TKY.STD.Pro", ORDER), "unknown"),
 ])
 def test_parser_in_real_dom(page, html, status):
     page.set_content(html)

@@ -1,6 +1,6 @@
 # 东京 VPS：库存、链路监控与单次年付订单
 
-> **代码说明更新：2026-10-10。** 本仓库记录的是部署设计与离线验证，不等于 VMISS 当前在线、库存真实有货、邮件已送达或订单已完成。线上状态应以带采样时间的只读 API / 授权 SSH / VMISS 官网账单为准。
+> **代码说明更新：2026-10-18。** 本仓库记录的是部署设计与离线验证，不等于 VMISS 当前在线、库存真实有货、邮件已送达或订单已完成。线上状态应以带采样时间的只读 API / 授权 SSH / VMISS 官网账单为准。
 
 - [库存与优惠页面](https://daidaideaa.github.io/vps_monitor/)
 - [VMISS 网络与资源监控](https://daidaideaa.github.io/vps_monitor/network.html)
@@ -21,16 +21,18 @@ Cloudflare Worker / Pages 只提供静态页面和 **60～300 秒缓存的白名
 
 | 商家 | 精确套餐 | 允许的 Telegram 来源 |
 | --- | --- | --- |
-| VMISS | `JP.TKY.TRI.Basic` | `@hostmonit`、`@vmisstz`、`@vmiss_com`、`@vmisscom` |
+| VMISS | `JP.TKY.STD.Basic` | `@hostmonit`、`@vmisstz`、`@vmiss_com`、`@vmisscom` |
 | GreenCloud | CN Premium Mini (Tokyo)（PID 2213） | `@hostmonit` |
 | DMIT | `TYO.Pro.TINY` | `@vps_spiders`、`@dmitnews` |
 | GoMami | `JPN.Pulse.Nano` | `@gcpcn`、`@gomaminetworks` |
 
 `@vmisscom`、`@gomaminetworks` 属于客户群，仅采信管理员或群自身发布的非转发消息；`@vmisstz` 于 2026-09-29 增加，不能仅凭名称认定为已核实的官方频道。解析必须同时满足来源白名单、精确套餐/链接等限制；新消息和编辑可处理，历史基线只记录而不通知。频道消息超过 30 分钟仅保留上次报告结论，当前库存转为待确认；`unknown` 不冒充售罄。实时会话是否成功连接，必须读取 collector 心跳。
 
+2026-10-18：VMISS 将 PID 101 从 `JP.TKY.TRI.Basic` 改名为 `JP.TKY.STD.Basic`，商品入口为 `/store/jp-tokyo-std`。匹配兼容旧名称，内部 ID 保持不变，沿用历史、消息去重与订单提交标记；新名称精确搜索只静默建立一次基线。
+
 ## 2026-10-09 增加：VMISS 单次年付锁单
 
-独立 `vps-vmiss-reservation` 服务仅针对 **一台 `JP.TKY.TRI.Basic`、Debian 12、年付**。初次启动可核对官网一次，之后只响应有效的新补货信号核对官网；不增加定时网页轮询。优惠码在官网结算验证，先使用账户余额，剩余金额留给用户手动支付宝支付；抵扣前总额超过 **144 CAD**、页面/套餐异常或已有目标账单/有效服务会停止。提交前持久记录防重复；提交不明只核对账单，不盲目重试。详见 [订单规则、隐私与只读状态查询](docs/vmiss-reservation.md)。
+独立 `vps-vmiss-reservation` 服务仅针对 **一台 `JP.TKY.STD.Basic`、Debian 12、年付**。初次启动可核对官网一次，之后只响应有效的新补货信号核对官网；不增加定时网页轮询。优惠码在官网结算验证，先使用账户余额，剩余金额留给用户手动支付宝支付；抵扣前总额超过 **144 CAD**、页面/套餐异常或已有目标账单/有效服务会停止。提交前持久记录防重复；提交不明只核对账单，不盲目重试。详见 [订单规则、隐私与只读状态查询](docs/vmiss-reservation.md)。
 
 2026-10-09 历史检查结果为目标套餐缺货，同系列测试仅完成预览，**不是今天的库存或订单状态**；不要将该自动锁单服务视为会自动完成支付宝支付。
 

@@ -120,7 +120,7 @@ class StateTest(unittest.TestCase):
         self.assertIsNone(result['products'][1]['last_checked'])
 
     def test_vmiss_history_survives_schema_migration(self):
-        state = {'target': {'product_name': 'JP.TKY.TRI.Basic', 'product_url': 'https://app.vmiss.com/store/jp-tokyo-tri'},
+        state = {'target': {'product_name': 'JP.TKY.STD.Basic', 'product_url': 'https://app.vmiss.com/store/jp-tokyo-std'},
                  'last_confirmed': 'unavailable', 'last_checked': '2026-09-21T00:03:00+00:00'}
         previous = {**state['target'], 'schema_version': 1, 'status': 'unavailable',
                     'last_checked': '2026-09-21T00:00:00+00:00', 'unavailable_since': '2026-09-20T23:00:00+00:00'}

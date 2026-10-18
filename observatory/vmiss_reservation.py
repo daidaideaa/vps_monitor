@@ -24,9 +24,10 @@ from bs4 import BeautifulSoup
 from .store import Store
 
 ORIGIN = 'https://app.vmiss.com'
-PRODUCT = 'JP.TKY.TRI.Basic'
+PRODUCT = 'JP.TKY.STD.Basic'
+PRODUCT_NAMES = (PRODUCT, 'JP.TKY.TRI.Basic')  # Existing services/invoices can retain the old name.
 TARGET = 'vmiss-jp-tky-tri-basic'
-PRODUCT_PATH = '/store/jp-tokyo-tri/basic'
+PRODUCT_PATH = '/store/jp-tokyo-std/basic'
 TERMINAL = {'held', 'paid_with_credit', 'manual_required', 'existing_service'}
 
 
@@ -206,7 +207,7 @@ class Merchant:
         page = self.request('/clientarea.php?action=products')
         if not page.soup.select_one('a[href*="logout"]'):
             raise ReservationError('session_expired')
-        return any(PRODUCT in row.get_text(' ', strip=True) and not re.search(r'Cancelled|Terminated|已取消|已终止', row.get_text(), re.I)
+        return any(any(name in row.get_text(' ', strip=True) for name in PRODUCT_NAMES) and not re.search(r'Cancelled|Terminated|已取消|已终止', row.get_text(), re.I)
                    for row in page.soup.select('table tbody tr'))
 
     def invoice_links(self):
@@ -239,7 +240,7 @@ class Merchant:
         soup = page.soup
         if p.path != '/viewinvoice.php' or not ident.isdigit():
             return None
-        if not any(PRODUCT in row.get_text(' ', strip=True) for row in soup.select('table tr')):
+        if not any(any(name in row.get_text(' ', strip=True) for name in PRODUCT_NAMES) for row in soup.select('table tr')):
             return None
         status_node = soup.select_one('.invoice-status') or soup.select_one('.invoice .status') or soup.select_one('.invoice-container .status') or soup.select_one('.status-unpaid, .status-paid')
         state = status_node.get_text(' ', strip=True) if status_node else ''
@@ -277,7 +278,7 @@ class Merchant:
             if option:
                 data[select['name']] = option['value']
         server_password = secrets.token_urlsafe(24)
-        data['hostname'] = data.get('hostname') or ('vmiss-tri-' + secrets.token_hex(6) + '.vmiss.com')
+        data['hostname'] = data.get('hostname') or ('vmiss-std-' + secrets.token_hex(6) + '.vmiss.com')
         data['ns1prefix'] = data.get('ns1prefix') or 'ns1'
         data['ns2prefix'] = data.get('ns2prefix') or 'ns2'
         data['rootpw'] = server_password

@@ -14,7 +14,7 @@ from observatory.vmiss_reservation import (Merchant, Page, Reservation, Reservat
     checkout_payload, coupon_candidates, order_signal, safe_url)
 
 
-def reservation_checkout(product='JP.TKY.TRI.Basic', cycle='/yr', quantity='1', amount='120.00', credit=True):
+def reservation_checkout(product='JP.TKY.STD.Basic', cycle='/yr', quantity='1', amount='120.00', credit=True):
     return Page(200, 'https://app.vmiss.com/cart.php?a=checkout', f'''
     <table><tr><td>{product}<span class="cart-item-price">$120.00 CAD{cycle}</span>
     <div hidden>$120.00 CAD/yr</div></td><td><input name="qty[0]" value="{quantity}"></td></tr></table>
@@ -31,23 +31,44 @@ class ObservatoryTest(unittest.TestCase):
     def tearDown(self):
         self.store.db.close();self.tmp.cleanup()
     def message(self,text=None,id=1,at=None):
-        return parse_message('hostmonit',id,text or 'JP.TKY.TRI.Basic\n库存：2\nhttps://app.vmiss.com/cart.php?a=add&pid=101',at or self.now)
+        return parse_message('hostmonit',id,text or 'JP.TKY.STD.Basic\n库存：2\nhttps://app.vmiss.com/cart.php?a=add&pid=101',at or self.now)
     def test_exact_product_and_region(self):
         self.assertIsNotNone(self.message())
-        for text in ['JP.TKY.TRI.Basic\n库存：2\nhttps://app.vmiss.com/cart.php?pid=102',
-                     '二手出一个 JP.TKY.TRI.Basic 库存：2 https://app.vmiss.com/',
+        for text in ['JP.TKY.STD.Basic\n库存：2\nhttps://app.vmiss.com/cart.php?pid=102',
+                     '二手出一个 JP.TKY.STD.Basic 库存：2 https://app.vmiss.com/',
                      'CN Premium Optimized Plan Mini (Tokyo)\n库存：2\nhttps://greencloudvps.com/billing/cart.php?pid=2305']:
             self.assertIsNone(self.message(text))
+    def test_vmiss_rename_preserves_identity_history_and_dedup(self):
+        from observatory.targets import TARGETS
+        target = TARGETS[0]
+        self.assertEqual((target['product_name'], target['pid'], target['product_url']),
+            ('JP.TKY.STD.Basic', '101', 'https://app.vmiss.com/store/jp-tokyo-std'))
+        old = self.channel_message(source='hostmonit', plan='JP.TKY.TRI.Basic')
+        self.assertEqual((old['id'], old['product_name']), (target['id'], 'JP.TKY.STD.Basic'))
+        accept(self.store, old, baseline=True, now=self.now)
+        current = self.channel_message(ident=2, offset=1)
+        accept(self.store, current, now=self.now+1, channels=('email',))
+        self.assertEqual(self.store.db.execute('SELECT COUNT(*) FROM outbox').fetchone()[0], 0)
+        view = snapshot(self.store, self.now+2)['products'][0]
+        self.assertEqual((view['id'], view['product_name'], view['status']),
+            (target['id'], 'JP.TKY.STD.Basic', 'available'))
+
+    def test_std_series_coupon_does_not_claim_basic_inventory(self):
+        for series in ('STD', 'TRI'):
+            p = parse_message('vmiss_com', 10, f'JP.TKY.{series} 全系列\n库存：20\n优惠码 SAVE20 年付 8折', self.now)
+            self.assertEqual((p['status'], p['stock'], p['coupon']['code']), ('unknown', None, 'SAVE20'))
+            accept(self.store, p, baseline=True, now=self.now)
+        self.assertIsNone(self.store.get('vmiss_order_signal'))
     def test_edited_sold_out_overrides_stale_quantity(self):
         p=self.message();accept(self.store,p,True)
-        sold=self.message('JP.TKY.TRI.Basic\n库存：2\n已售罄\nhttps://app.vmiss.com/cart.php?pid=101',at=self.now+1)
+        sold=self.message('JP.TKY.STD.Basic\n库存：2\n已售罄\nhttps://app.vmiss.com/cart.php?pid=101',at=self.now+1)
         self.assertEqual(sold['status'],'unavailable');accept(self.store,sold,False,now=self.now+1)
         self.assertEqual(snapshot(self.store,self.now+2)['products'][0]['stock'],0)
     def test_baseline_dedup_catchup_old_and_new(self):
         accept(self.store,self.message(),True)
         self.assertEqual(self.store.db.execute('SELECT count(*) FROM outbox').fetchone()[0],0)
         accept(self.store,self.message(),False)
-        sold=self.message('JP.TKY.TRI.Basic\n售罄\nhttps://app.vmiss.com/?pid=101',2,self.now+1)
+        sold=self.message('JP.TKY.STD.Basic\n售罄\nhttps://app.vmiss.com/?pid=101',2,self.now+1)
         accept(self.store,sold,False,now=self.now+1)
         p=self.message(id=3,at=self.now+2);accept(self.store,p,False,now=self.now+2);accept(self.store,p,False,now=self.now+2)
         self.assertEqual(self.store.db.execute('SELECT count(*) FROM outbox').fetchone()[0],2)
@@ -66,7 +87,7 @@ class ObservatoryTest(unittest.TestCase):
         self.assertEqual(parse_coupon('优惠码 OLD 年付 8折 有效期至 2020-01-01',self.now)['validity'],'expired')
     def test_new_coupon_once_while_available(self):
         p=self.message();accept(self.store,p,True)
-        p=self.message('JP.TKY.TRI.Basic\n库存：2\n优惠码 YEAR 年付 8折\nhttps://app.vmiss.com/?pid=101',2,self.now+1)
+        p=self.message('JP.TKY.STD.Basic\n库存：2\n优惠码 YEAR 年付 8折\nhttps://app.vmiss.com/?pid=101',2,self.now+1)
         accept(self.store,p,now=self.now+1);accept(self.store,p,now=self.now+1)
         self.assertEqual(self.store.db.execute('SELECT count(*) FROM outbox').fetchone()[0],2)
     def test_incomplete_discount_and_negative_renewal(self):
@@ -84,7 +105,7 @@ class ObservatoryTest(unittest.TestCase):
         self.assertEqual(Incidents(self.store,'vmiss').observe(s)[0]['target'],'test.service')
     def test_coupon_only_message_does_not_refresh_stock(self):
         accept(self.store,self.message(),True)
-        p=self.message('JP.TKY.TRI.Basic\n优惠码 NEWYEAR 年付 8折\nhttps://app.vmiss.com/?pid=101',2,self.now+20)
+        p=self.message('JP.TKY.STD.Basic\n优惠码 NEWYEAR 年付 8折\nhttps://app.vmiss.com/?pid=101',2,self.now+20)
         accept(self.store,p,now=self.now+20)
         data=snapshot(self.store,self.now+21)['products'][0]
         self.assertEqual(data['event_at'],self.now)
@@ -143,7 +164,7 @@ class ObservatoryTest(unittest.TestCase):
         data, amount = checkout_payload(reservation_checkout())
         self.assertEqual((data['applycredit'], data['paymentmethod'], str(amount)), ('1', 'motionpayalipay', '120.00'))
         self.assertNotIn('ccnumber', data)
-        for change in [dict(product='JP.TKY.TRI.Pro'), dict(cycle='/mo'), dict(quantity='2'), dict(amount='200.00'), dict(credit=False)]:
+        for change in [dict(product='JP.TKY.STD.Pro'), dict(product='JP.TKY.TRI.Basic'), dict(cycle='/mo'), dict(quantity='2'), dict(amount='200.00'), dict(credit=False)]:
             with self.subTest(change=change), self.assertRaises(ReservationError):
                 checkout_payload(reservation_checkout(**change))
         for url in ['https://evil.example/checkout', 'http://app.vmiss.com/', 'https://app.vmiss.com@evil.example/']:
@@ -215,7 +236,7 @@ class ObservatoryTest(unittest.TestCase):
             order_signal(self.store, {**p, **change}, now=self.now)
         self.assertIsNone(self.store.get('vmiss_order_signal'))
         accept(self.store, p, baseline=True, now=self.now)
-        coupon = self.message('JP.TKY.TRI.Basic\n优惠码 NEW 年付 8折\nhttps://app.vmiss.com/?pid=101', 2, self.now+1)
+        coupon = self.message('JP.TKY.STD.Basic\n优惠码 NEW 年付 8折\nhttps://app.vmiss.com/?pid=101', 2, self.now+1)
         accept(self.store, coupon, now=self.now+1)
         self.assertIsNone(self.store.get('vmiss_order_signal'))
         fresh = self.message(id=3, at=self.now+2)
@@ -233,15 +254,25 @@ class ObservatoryTest(unittest.TestCase):
         <tr data-url="viewinvoice.php?id=3"><td>未付款</td></tr></tbody></table>''')
         topup = Page(200, 'https://app.vmiss.com/viewinvoice.php?id=2', '<table><tr><td>账户充值</td></tr></table>')
         target = Page(200, 'https://app.vmiss.com/viewinvoice.php?id=3', '''
-        <span class="invoice-status">未付款</span><table><tr><td>JP.TKY.TRI.Basic</td></tr>
+        <span class="invoice-status">未付款</span><table><tr><td>JP.TKY.STD.Basic</td></tr>
         <tr><td>余额</td><td>$15.00 CAD</td></tr><tr><td>结余</td><td>$93.00 CAD</td></tr></table>''')
         merchant.request = lambda path: listing if 'invoices' in path else topup if 'id=2' in path else target
         result = merchant.invoice()
         self.assertEqual((result['invoice_id'], result['credit_applied'], result['balance_due']), ('3', '15.00', '93.00'))
         self.assertIsNone(merchant.invoice(exclude_ids=['3']))
         self.assertEqual(Merchant.inspect_invoice(Page(200, target.url, target.html.replace('未付款', '已付款')))['status'], 'paid_with_credit')
+        old = Page(200, target.url, target.html.replace('JP.TKY.STD.Basic', 'JP.TKY.TRI.Basic'))
+        self.assertEqual(Merchant.inspect_invoice(old)['invoice_id'], '3')
 
-    def channel_message(self, source='vmisstz', ident=1, state='✅ 补货', code='10%OFF', offset=0, plan='JP.TKY.TRI.Basic'):
+    def test_existing_service_detects_both_vmiss_names(self):
+        merchant = object.__new__(Merchant)
+        for name in ('JP.TKY.STD.Basic', 'JP.TKY.TRI.Basic'):
+            for state, expected in [('Active', True), ('Cancelled', False)]:
+                html = f'<a href="logout.php">Logout</a><table><tbody><tr><td>{name}</td><td>{state}</td></tr></tbody></table>'
+                merchant.request = lambda path: Page(200, 'https://app.vmiss.com/clientarea.php', html)
+                self.assertEqual(merchant.existing_service(), expected)
+
+    def channel_message(self, source='vmisstz', ident=1, state='✅ 补货', code='10%OFF', offset=0, plan='JP.TKY.STD.Basic'):
         return parse_message(source, ident, f'VMISS - {plan}\n价格：$5.00 CAD 每月\n优惠码：{code}\n{state}',
             self.now+offset, ['https://app.vmiss.com/cart.php?a=add&pid=101'])
 
@@ -253,7 +284,7 @@ class ObservatoryTest(unittest.TestCase):
         self.assertEqual((p['status'], p['coupon']['code'], p['prices'][0]['currency'], p['prices'][0]['cycle']), ('available', '10%OFF', 'CAD', '月'))
         for plan in ('JP.TKY.IIJ.Basic', 'JP.TKY.BGP.Core', 'JP.OSA.IIJ.Basic', 'US.LA.TRI.Basic'):
             self.assertIsNone(self.channel_message(plan=plan))
-        self.assertIsNone(parse_message('vmisstz', 3, 'JP.TKY.TRI.Basic\n✅ 补货', self.now))
+        self.assertIsNone(parse_message('vmisstz', 3, 'JP.TKY.STD.Basic\n✅ 补货', self.now))
 
     def test_vmisstz_edits_and_cross_source_dedup(self):
         accept(self.store, self.channel_message(), baseline=True, now=self.now, channels=('email',))

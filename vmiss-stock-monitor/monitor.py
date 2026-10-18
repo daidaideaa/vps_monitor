@@ -40,8 +40,8 @@ BLOCKED = re.compile(
 
 @dataclass(frozen=True)
 class Config:
-    product_name: str = "JP.TKY.TRI.Basic"
-    product_url: str = "https://app.vmiss.com/store/jp-tokyo-tri?language=chinese"
+    product_name: str = "JP.TKY.STD.Basic"
+    product_url: str = "https://app.vmiss.com/store/jp-tokyo-std?language=chinese"
     interval: int = 60
     timeout_ms: int = 30000
     error_after: int = 10
