@@ -13,6 +13,25 @@ from .stock import parse_message, accept, snapshot
 from .notify import drain_async
 
 
+async def check_connection(client, store, offline_since, now=None):
+    """Let systemd restart a dead session instead of leaving an idle live process."""
+    now = time.monotonic() if now is None else now
+    if client.is_connected():
+        if offline_since is not None:
+            await client.catch_up()
+        return None
+    if offline_since is None:
+        offline_since = now
+        store.set('telegram_health', {'state': 'disconnected', 'checked_at': time.time(),
+            'last_event_at': store.get('last_channel_event'), 'sources': CHANNELS})
+    if client.disconnected.done() or now - offline_since >= 30:
+        try:
+            await asyncio.wait_for(client.disconnect(), timeout=10)
+        finally:
+            raise ConnectionError('Telegram listener disconnected; restart required')
+    return offline_since
+
+
 async def run(config, login=False):
     from telethon import TelegramClient, events, errors
     from telethon.tl.functions.channels import JoinChannelRequest
@@ -90,8 +109,13 @@ async def run(config, login=False):
     last_health = 0
     last_trim = 0
     delivery = None
+    offline_since = None
     next_admin_refresh=time.time()+3600
     while True:
+        previous_offline = offline_since
+        offline_since = await check_connection(client, store, offline_since)
+        if previous_offline is not None and offline_since is None:
+            last_health = 0
         if time.time()>=next_admin_refresh:
             for entity in entities:
                 name=peers[entity.id]
