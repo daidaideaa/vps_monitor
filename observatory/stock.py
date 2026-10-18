@@ -23,7 +23,8 @@ def parse_message(channel, message_id, text, event_at, urls=()):
         if channel not in target['channels']:
             continue
         series_coupon = (target['provider']=='VMISS' and channel in VENDOR_SOURCES
-                         and 'jp.tky.tri' in normalized and not re.search(r'except|excluding|不适用|除外',normalized)
+                         and any(series in normalized for series in ('jp.tky.std', 'jp.tky.tri'))
+                         and not re.search(r'except|excluding|不适用|除外',normalized)
                          and bool(parse_coupon(text,event_at)))
         if not any(alias in normalized for alias in target['aliases']) and not series_coupon:
             continue

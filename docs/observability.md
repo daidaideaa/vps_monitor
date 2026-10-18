@@ -64,3 +64,5 @@ VMISS 代码 /opt/vps-observatory-low，配置 /etc/vps-observatory-low（私有
 2026-09-29 新增用户指定的 `vmisstz`（VMISS 补货通知频道），使 VMISS 合计有上述四个来源。非商家公告来源需匹配 JP.TKY.TRI.Basic 及 VMISS 商品链接；不能只因频道名称就将其视为已验证的官方公告。首次历史静默建基线，新消息与售罄编辑沿用原监听及跨来源状态去重，不增加周期网页抓取。
 
 GreenCloud 基线改按商品编号 2213 搜索，避免被 Singapore Mini 挤占。库存页区分“上次报告结论”和“当前待确认”，不把读取旧消息改成当前证据。历史优惠码显示适用周期、续费、有效期和来源条款，超过 30 天的未注明过期优惠提示当前有效性待确认。
+
+2026-10-18：VMISS PID 101 改名为 `JP.TKY.STD.Basic`，入口为 `https://app.vmiss.com/store/jp-tokyo-std`。当前名称与旧 TRI 别名都映射到原内部 ID；保留消息与通知去重。新名称在四个原有 VMISS 来源执行一次有界静默搜索，历史搜索不发送通知、不触发订单；后续新消息仍按原有规则处理。

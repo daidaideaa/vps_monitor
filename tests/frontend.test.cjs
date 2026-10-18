@@ -47,6 +47,16 @@ test('旧快照中的 V.PS 不再显示或计入统计', async () => {
   assert.equal(visit(p.nodes.overview).join(''), '1 个套餐有货1 有货 / 3 无货 / 0 待确认');
 });
 
+test('VMISS 改名后旧缓存仍展示 STD 及新链接，保留原库存时间', async () => {
+  const data = snapshot();
+  Object.assign(data.products[1], {product_name:'JP.TKY.TRI.Basic', product_url:'https://app.vmiss.com/store/jp-tokyo-tri'});
+  const p = page(async () => Response.json(data)); await p.run('load()');
+  assert.equal(p.run('latest[0].product_name'), 'JP.TKY.STD.Basic');
+  assert.equal(p.run('latest[0].product_url'), 'https://app.vmiss.com/store/jp-tokyo-std');
+  assert.equal(p.run('latest[0].last_checked'), data.products[1].last_checked);
+  assert.equal(p.run('latest[0].status'), 'available');
+});
+
 test('页面同步时间独立于商家实际检查时间，失败不显示同步成功', async () => {
   let failed = false;
   const data = snapshot();

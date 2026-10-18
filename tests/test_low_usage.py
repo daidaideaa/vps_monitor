@@ -91,7 +91,7 @@ class LowUsage(unittest.TestCase):
         self.assertEqual(self.hub.budget_control(self.now+86500)['level'],1)
         self.assertEqual(self.hub.budget_control(self.now+172802)['level'],2)
     def test_stock_email_only_and_cancel_legacy_backlog(self):
-        p=parse_message('hostmonit',1,'JP.TKY.TRI.Basic\n库存：1\nhttps://app.vmiss.com/cart.php?pid=101',self.now)
+        p=parse_message('hostmonit',1,'JP.TKY.STD.Basic\n库存：1\nhttps://app.vmiss.com/cart.php?pid=101',self.now)
         accept(self.store,p,channels=('email',));accept(self.store,p,channels=('email',))
         self.assertEqual(self.store.db.execute('SELECT channel FROM outbox').fetchall(),[('email',)])
         self.store.enqueue('link-down:old','old');self.store.cancel_legacy_notifications()

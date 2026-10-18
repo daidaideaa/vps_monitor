@@ -8,8 +8,8 @@ from export_status import snapshot
 
 class SnapshotTest(unittest.TestCase):
     def state(self, confirmed='unavailable', errors=0):
-        return {'target': {'product_name': 'JP.TKY.TRI.Basic',
-                           'product_url': 'https://app.vmiss.com/store/jp-tokyo-tri'},
+        return {'target': {'product_name': 'JP.TKY.STD.Basic',
+                           'product_url': 'https://app.vmiss.com/store/jp-tokyo-std'},
                 'last_confirmed': confirmed, 'last_checked': '2026-09-21T08:00:00+08:00',
                 'unknown_count': errors, 'last_unknown_reason': 'HTTP 403 / Cloudflare challenge'}
 
@@ -42,7 +42,7 @@ class SnapshotTest(unittest.TestCase):
     def test_missing_state_exports_only_vmiss(self):
         result = snapshot({})
         self.assertEqual(result['schema_version'], 1)
-        self.assertEqual(result['product_name'], 'JP.TKY.TRI.Basic')
+        self.assertEqual(result['product_name'], 'JP.TKY.STD.Basic')
         self.assertEqual(result['status'], 'unknown')
         self.assertNotIn('products', result)
         self.assertNotIn('ZgoCloud', str(result))
